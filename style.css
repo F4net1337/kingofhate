@@ -273,19 +273,19 @@ b {
   flex-wrap: wrap;
   justify-content: center;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
 }
 
 .elsewhere a {
-  flex: 0 1 160px;
-  max-width: 175px;
-  min-width: 130px;
+  flex: 0 1 auto;
+  min-width: 115px;
+  max-width: 155px;
   justify-content: center;
   display: inline-flex;
   align-items: center;
   gap: 8px;
   height: 38px;
-  padding: 0 16px;
+  padding: 0 14px;
   border-radius: 999px;
   background: var(--card-2);
   border: 1px solid var(--line);
