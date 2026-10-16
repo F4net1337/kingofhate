@@ -151,12 +151,23 @@ function updateTime() {
     tzDiffEl.textContent = `${tzLabel} · ekb (msk+2)` + (diffHours === 0 ? ' · your time' : diffHours > 0 ? ` · ${hs} ahead` : ` · ${hs} behind`);
   }
 
-  // Day percentage bar
+  // Day percentage bar and period of day
   const dayProgress = (hour * 3600 + min * 60 + sec) / 864;
   const dayFill = $('dayfill');
   const dayPct = $('daypct');
+  const dayLabel = $('daylabel');
+
   if (dayFill) dayFill.style.width = dayProgress.toFixed(2) + '%';
   if (dayPct) dayPct.textContent = Math.floor(dayProgress) + '%';
+
+  if (dayLabel) {
+    let period = 'day';
+    if (hour >= 5 && hour < 12) period = 'morning';
+    else if (hour >= 12 && hour < 18) period = 'day';
+    else if (hour >= 18 && hour < 23) period = 'evening';
+    else period = 'night';
+    dayLabel.textContent = period;
+  }
 }
 updateTime();
 setInterval(updateTime, 1000);
@@ -560,7 +571,10 @@ function applyLiveMusic(track) {
   liveTrackDuration = Math.max(1000, (track.duration || 180) * 1000);
 
   if (npName) npName.textContent = track.title;
-  if (npArtists) npArtists.innerHTML = `${track.artist} <small style="color:var(--accent);margin-left:4px;">• live</small>`;
+  if (npArtists) {
+    npArtists.style.display = '';
+    npArtists.innerHTML = `${track.artist} <small style="color:var(--accent);margin-left:4px;">• live</small>`;
+  }
 
   const statusPill = document.querySelector('.np-status-pill');
   const dot = document.querySelector('.np-dot');
@@ -585,7 +599,7 @@ function applyLiveMusic(track) {
   startProgressBar();
 }
 
-// Состояние покоя (когда музыка НЕ играет — индикатор СТОИТ на 0)
+// Состояние покоя (когда музыка НЕ играет — offline, индикатор СТОИТ на 0)
 function setPlayerIdle() {
   isLivePlaying = false;
   liveTrackData = null;
@@ -593,14 +607,17 @@ function setPlayerIdle() {
   liveTrackDuration = 0;
   stopProgressBar();
 
-  if (npName) npName.textContent = 'Not playing';
-  if (npArtists) npArtists.textContent = 'start music in Dotify';
+  if (npName) npName.textContent = 'offline';
+  if (npArtists) {
+    npArtists.textContent = '';
+    npArtists.style.display = 'none';
+  }
 
   const statusPill = document.querySelector('.np-status-pill');
   const dot = document.querySelector('.np-dot');
   if (statusPill) statusPill.classList.add('idle');
   if (dot) dot.classList.add('idle');
-  if (npStatusText) npStatusText.textContent = 'idle · Dotify';
+  if (npStatusText) npStatusText.textContent = 'offline';
 
   if (npCover) {
     npCover.style.backgroundImage = 'none';
