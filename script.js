@@ -148,7 +148,8 @@ function updateTime() {
 
   const tzDiffEl = $('tzdiff');
   if (tzDiffEl) {
-    tzDiffEl.textContent = `${tzLabel} · ekb (msk+2)` + (diffHours === 0 ? ' · your time' : diffHours > 0 ? ` · ${hs} ahead` : ` · ${hs} behind`);
+    const diffStr = diffHours === 0 ? ' · your time' : diffHours > 0 ? ` · ${hs} ahead` : ` · ${hs} behind`;
+    tzDiffEl.textContent = `utc+5 · ekb (msk+2)${diffStr}`;
   }
 
   // Day percentage bar and period of day
@@ -161,7 +162,7 @@ function updateTime() {
   if (dayPct) dayPct.textContent = Math.floor(dayProgress) + '%';
 
   if (dayLabel) {
-    let period = 'day';
+    let period = 'evening';
     if (hour >= 5 && hour < 12) period = 'morning';
     else if (hour >= 12 && hour < 18) period = 'day';
     else if (hour >= 18 && hour < 23) period = 'evening';
