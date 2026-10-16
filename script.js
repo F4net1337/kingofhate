@@ -159,7 +159,12 @@ function updateTime() {
   const dayLabel = $('daylabel');
 
   if (dayFill) dayFill.style.width = dayProgress.toFixed(2) + '%';
-  if (dayPct) dayPct.textContent = Math.floor(dayProgress) + '%';
+  if (dayPct) dayPct.textContent = Math.round(dayProgress) + '%';
+
+  const dayBar = dayFill ? dayFill.closest('.bar') : null;
+  if (dayBar) {
+    dayBar.title = `Day progress: ${Math.round(dayProgress)}% passed (${Math.round(100 - dayProgress)}% remaining)`;
+  }
 
   if (dayLabel) {
     let period = 'evening';
