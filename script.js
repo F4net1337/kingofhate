@@ -9,6 +9,8 @@ const CONFIG = {
   tz: 'Asia/Yekaterinburg',
   telegram: 'kingofhatte',
   steam: 'rapenotcriminal',
+  instagram: 'kiingofhate',
+  instagramUrl: 'https://www.instagram.com/kiingofhate?xtok=MWNrcDU1c2J2bXZwNA==',
   discordTag: 'fanet666',
   twitch: 'fanetxd',
   about: 'dont want to do anything',
@@ -822,6 +824,7 @@ if ($('hero-name')) $('hero-name').textContent = CONFIG.name;
 if ($('tg-handle')) $('tg-handle').textContent = '@' + CONFIG.telegram;
 if ($('tg-card')) $('tg-card').href = 'https://t.me/' + CONFIG.telegram;
 if ($('link-tg-pill')) $('link-tg-pill').href = 'https://t.me/' + CONFIG.telegram;
+if ($('link-insta')) $('link-insta').href = CONFIG.instagramUrl || ('https://www.instagram.com/' + CONFIG.instagram);
 if ($('link-steam')) $('link-steam').href = 'https://steamcommunity.com/id/' + CONFIG.steam + '/';
 if ($('about-content')) $('about-content').innerHTML = `<p>${CONFIG.about}</p>`;
 if ($('ds-text')) $('ds-text').textContent = CONFIG.discordTag || 'fanet666';
