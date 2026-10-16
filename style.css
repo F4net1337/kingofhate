@@ -1122,8 +1122,8 @@ b {
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
   box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5), 0 0 30px rgba(52, 211, 153, 0.08);
-  border-radius: 20px;
-  padding: 24px 20px 22px;
+  border-radius: 18px;
+  padding: 38px 14px 14px;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -1138,10 +1138,10 @@ b {
 
 .secret-close {
   position: absolute;
-  top: 12px;
-  right: 12px;
-  width: 32px;
-  height: 32px;
+  top: 10px;
+  right: 10px;
+  width: 28px;
+  height: 28px;
   border-radius: 50%;
   background: rgba(255, 255, 255, 0.06);
   border: 1px solid rgba(255, 255, 255, 0.12);
@@ -1153,9 +1153,9 @@ b {
   transition: all .2s;
 }
 .secret-close:hover {
-  background: rgba(244, 114, 182, 0.2);
+  background: rgba(255, 255, 255, 0.16);
   color: #fff;
-  border-color: rgba(244, 114, 182, 0.5);
+  border-color: rgba(255, 255, 255, 0.3);
   transform: scale(1.08);
 }
 
@@ -1165,34 +1165,15 @@ b {
   border: none;
   padding: 0;
   box-shadow: none;
-  margin-top: 10px;
-  margin-bottom: 20px;
+  margin: 0;
 }
 
 .secret-img {
   width: 100%;
   height: auto;
   display: block;
-  border-radius: 12px;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
-}
-
-.secret-title {
-  font-size: clamp(28px, 6.5vw, 44px);
-  font-weight: 800;
-  letter-spacing: -.02em;
-  margin: 0;
-  background: linear-gradient(90deg, #34d399, #f472b6, #fb7185, #a7f3d0, #34d399);
-  background-size: 300% 100%;
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  animation: shimmerLove 3.5s linear infinite;
-  filter: drop-shadow(0 0 16px rgba(244, 114, 182, 0.45));
-}
-
-@keyframes shimmerLove {
-  0% { background-position: 0% 50%; }
-  100% { background-position: 300% 50%; }
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
 }
 
 /* ── CUSTOM CURSOR (DESKTOP) ── */
