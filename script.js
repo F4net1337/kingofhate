@@ -828,3 +828,90 @@ if ($('link-insta')) $('link-insta').href = CONFIG.instagramUrl || ('https://www
 if ($('link-steam')) $('link-steam').href = 'https://steamcommunity.com/id/' + CONFIG.steam + '/';
 if ($('about-content')) $('about-content').innerHTML = `<p>${CONFIG.about}</p>`;
 if ($('ds-text')) $('ds-text').textContent = CONFIG.discordTag || 'fanet666';
+
+// ── 11. EASTER EGG (JULIA ❤️) ───────────────────────────
+const secretBtn = $('secret-btn');
+const secretModal = $('secret-modal');
+const secretBackdrop = $('secret-backdrop');
+const secretClose = $('secret-close');
+const secretHearts = $('secret-hearts');
+
+function spawnSecretHeart(x, y) {
+  if (!secretHearts) return;
+  const heart = document.createElement('span');
+  heart.className = 'floating-heart';
+  const emojis = ['❤️', '💖', '✨', '💕', '💗', '🥰', '🌸'];
+  heart.textContent = emojis[Math.floor(Math.random() * emojis.length)];
+  
+  const left = x !== undefined ? x : 10 + Math.random() * 80;
+  const bottom = y !== undefined ? y : 10 + Math.random() * 30;
+  heart.style.left = typeof left === 'number' ? left + '%' : left;
+  heart.style.bottom = typeof bottom === 'number' ? bottom + '%' : bottom;
+  heart.style.setProperty('--rot', (Math.random() * 40 - 20).toFixed(0) + 'deg');
+  heart.style.fontSize = (16 + Math.random() * 12).toFixed(0) + 'px';
+  
+  secretHearts.append(heart);
+  setTimeout(() => heart.remove(), 2300);
+}
+
+function openSecretModal() {
+  if (!secretModal) return;
+  secretModal.classList.add('is-active');
+  secretModal.setAttribute('aria-hidden', 'false');
+
+  // Play gentle chime if audio is enabled
+  if (CONFIG.soundEffects) {
+    try {
+      const ctx = getAudioContext();
+      if (ctx) {
+        if (ctx.state === 'suspended') ctx.resume();
+        const now = ctx.currentTime;
+        [523.25, 659.25, 783.99, 1046.50].forEach((freq, i) => {
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(freq, now + i * 0.08);
+          gain.gain.setValueAtTime(0.001, now + i * 0.08);
+          gain.gain.linearRampToValueAtTime(0.08, now + i * 0.08 + 0.02);
+          gain.gain.exponentialRampToValueAtTime(0.0001, now + i * 0.08 + 0.4);
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          osc.start(now + i * 0.08);
+          osc.stop(now + i * 0.08 + 0.45);
+        });
+      }
+    } catch (e) {}
+  }
+
+  // Spawn gentle wave of floating hearts
+  for (let i = 0; i < 14; i++) {
+    setTimeout(() => spawnSecretHeart(), i * 120);
+  }
+}
+
+function closeSecretModal() {
+  if (!secretModal) return;
+  secretModal.classList.remove('is-active');
+  secretModal.setAttribute('aria-hidden', 'true');
+}
+
+if (secretBtn) secretBtn.addEventListener('click', openSecretModal);
+if (secretClose) secretClose.addEventListener('click', closeSecretModal);
+if (secretBackdrop) secretBackdrop.addEventListener('click', closeSecretModal);
+
+const secretCard = document.querySelector('.secret-card');
+if (secretCard) {
+  secretCard.addEventListener('click', (e) => {
+    if (e.target.closest('.secret-close')) return;
+    const r = secretCard.getBoundingClientRect();
+    const xPct = ((e.clientX - r.left) / r.width) * 100;
+    const yPct = ((r.bottom - e.clientY) / r.height) * 100;
+    spawnSecretHeart(xPct, yPct);
+  });
+}
+
+window.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && secretModal && secretModal.classList.contains('is-active')) {
+    closeSecretModal();
+  }
+});
