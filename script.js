@@ -323,7 +323,7 @@ if (!reduceMotion && cat) {
   })();
 }
 
-// ── 6. PETS COUNTER (ОБНУЛЁННЫЙ СЧЁТЧИК) ───────────────
+// ── 6. PETS COUNTER (ГЛОБАЛЬНЫЙ ОБЛАЧНЫЙ СЧЁТЧИК ДЛЯ ВСЕХ ПОСЕТИТЕЛЕЙ) ───
 const MOODS = [
   [1, 'mrrp'],
   [3, 'purring'],
@@ -333,12 +333,14 @@ const MOODS = [
   [100, 'you live here now']
 ];
 
-// Полный сброс в 0 по запросу пользователя
+const PETS_API_READ = 'https://counterapi.com/api/kingofhate/pets/cat?readOnly=true';
+const PETS_API_UP = 'https://counterapi.com/api/kingofhate/pets/cat';
+
 let myPets = 0;
 let totalPets = 0;
+
 try {
-  // Начинаем с нуля
-  localStorage.setItem('rin_green_pets', '0');
+  myPets = parseInt(localStorage.getItem('rin_green_mypets'), 10) || 0;
 } catch (e) {}
 
 function renderCatCaption() {
@@ -364,7 +366,7 @@ const updateCatCap = renderCatCaption;
 function renderPets(bump = false) {
   const petsEl = $('pets');
   const moodEl = $('mood');
-  if (petsEl) petsEl.textContent = (totalPets + myPets).toLocaleString('en-US');
+  if (petsEl) petsEl.textContent = totalPets.toLocaleString('en-US');
 
   let moodStr = '';
   for (const [n, m] of MOODS) if (myPets >= n) moodStr = m;
@@ -380,6 +382,48 @@ function renderPets(bump = false) {
 }
 renderPets(false);
 
+// Загрузка глобального счетчика со всего мира
+async function fetchGlobalPets() {
+  try {
+    const res = await fetch(PETS_API_READ);
+    if (!res.ok) return;
+    const data = await res.json();
+    if (typeof data.value === 'number') {
+      totalPets = Math.max(totalPets, data.value);
+      renderPets(false);
+    }
+  } catch (e) {}
+}
+fetchGlobalPets();
+// Фоновая синхронизация каждые 12 секунд
+setInterval(fetchGlobalPets, 12000);
+
+let pendingPetSync = 0;
+let petDebounceTimer = null;
+
+function syncPetIncrement() {
+  pendingPetSync++;
+  if (!petDebounceTimer) {
+    petDebounceTimer = setTimeout(async () => {
+      petDebounceTimer = null;
+      const count = pendingPetSync;
+      pendingPetSync = 0;
+      for (let i = 0; i < count; i++) {
+        try {
+          const res = await fetch(PETS_API_UP);
+          if (res.ok) {
+            const data = await res.json();
+            if (typeof data.value === 'number') {
+              totalPets = Math.max(totalPets, data.value);
+              renderPets(false);
+            }
+          }
+        } catch (e) {}
+      }
+    }, 150);
+  }
+}
+
 const PET_FACES = ['happy', 'squint', 'hearts', 'stars', 'content', 'shiny'];
 let lastFace = '';
 let petTimestamps = [];
@@ -387,9 +431,11 @@ let blushTimer;
 
 function handlePet(x, y) {
   myPets++;
-  try { localStorage.setItem('rin_green_pets', myPets); } catch (e) {}
+  totalPets++;
+  try { localStorage.setItem('rin_green_mypets', myPets); } catch (e) {}
   updateCatCap();
   renderPets(true);
+  syncPetIncrement();
 
   // Play audio chirrup
   playPurrSound();
