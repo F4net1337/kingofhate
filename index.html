@@ -22,7 +22,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Onest:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
 
-  <link rel="stylesheet" href="style.css?v=5">
+  <link rel="stylesheet" href="style.css?v=6">
 </head>
 <body>
 
@@ -225,6 +225,13 @@
 
     <!-- Footer credit -->
     <footer class="footer">
+      <button class="secret-btn" id="secret-btn" title="secret :3" aria-label="secret">
+        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/>
+        </svg>
+        <span>secret</span>
+      </button>
+
       <button class="sound-toggle" id="sound-btn" title="Звуковые эффекты">
         <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M11 5 6 9H2v6h4l5 4V5z"/>
@@ -235,7 +242,31 @@
     </footer>
   </div>
 
+  <!-- Easter Egg Modal: Julia ❤️ -->
+  <div class="secret-modal" id="secret-modal" aria-hidden="true">
+    <div class="secret-backdrop" id="secret-backdrop"></div>
+    <div class="secret-card">
+      <button class="secret-close" id="secret-close" aria-label="Закрыть" title="Закрыть">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="18" y1="6" x2="6" y2="18"></line>
+          <line x1="6" y1="6" x2="18" y2="18"></line>
+        </svg>
+      </button>
+      
+      <div class="secret-img-wrap">
+        <img src="julia.png" alt="Юля ❤️" class="secret-img" loading="eager">
+      </div>
+
+      <div class="secret-content">
+        <h2 class="secret-title">love you julia</h2>
+        <div class="secret-sub">❤️ forever & always</div>
+      </div>
+
+      <div class="secret-hearts-container" id="secret-hearts" aria-hidden="true"></div>
+    </div>
+  </div>
+
   <script src="gradient-waves.js?v=4"></script>
-  <script src="script.js?v=5"></script>
+  <script src="script.js?v=6"></script>
 </body>
 </html>
