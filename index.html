@@ -186,12 +186,12 @@
       <section class="tile pets">
         <div class="label">pets</div>
         <div class="pets-row">
-          <div class="big mono" id="pets"><script>try{const m=parseInt(localStorage.getItem('rin_green_mypets'),10)||0;const t=Math.max(m,parseInt(localStorage.getItem('rin_green_totalpets'),10)||0);document.write(t>0?t.toLocaleString('en-US'):'0');}catch(e){document.write('0');}</script></div>
+          <div class="big mono" id="pets"><script>try{const m=parseInt(localStorage.getItem('rin_green_mypets'),10)||0;const cached=parseInt(localStorage.getItem('rin_green_totalpets'),10)||0;const t=Math.max(cached,m,715);document.write(t.toLocaleString('en-US'));}catch(e){document.write('715');}</script></div>
           <span class="pets-plus mono" id="pets-plus" aria-hidden="true">+1</span>
         </div>
         <div class="sub">
           <span>pets from everyone</span>
-          <span id="mood"><script>try{const m=parseInt(localStorage.getItem('rin_green_mypets'),10)||0;document.write(m?m.toLocaleString('en-US')+' from you · patting':'click the cat to add yours');}catch(e){document.write('click the cat to add yours');}</script></span>
+          <span id="mood"><script>try{const m=parseInt(localStorage.getItem('rin_green_mypets'),10)||0;let md='mrrp';if(m>=100)md='you live here now';else if(m>=50)md='the cat is attached to you now';else if(m>=25)md="that's a lot of pets";else if(m>=10)md='very happy cat';else if(m>=3)md='purring';document.write(m?m.toLocaleString('en-US')+' from you · '+md:'click the cat to add yours');}catch(e){document.write('click the cat to add yours');}</script></span>
         </div>
       </section>
 
@@ -274,6 +274,6 @@
   </div>
 
   <script src="gradient-waves.js?v=4"></script>
-  <script src="script.js?v=12"></script>
+  <script src="script.js?v=13"></script>
 </body>
 </html>
