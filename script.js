@@ -637,97 +637,194 @@ function setPlayerIdle() {
   }
 }
 
-// ── 7.1. ИНТЕГРАЦИЯ С LANYARD (DISCORD SPOTIFY / YANDEX MUSIC RPC) ──
+// ── 7.1. ИНТЕГРАЦИЯ С LANYARD (DISCORD GATEWAY & RPC) ──
+let lanyardWs = null;
+let lanyardHeartbeat = null;
+let lanyardPollTimer = null;
+let isLanyardPolling = false;
+
+function handlePresence(p) {
+  if (!p) return;
+
+  // 1. СТАТУС ДИСКОРДА (online / idle / dnd / offline)
+  const statusDot = $('ds-status-dot');
+  if (statusDot) {
+    const st = p.discord_status || 'offline';
+    statusDot.className = `ds-status-dot ${st}`;
+    statusDot.title = `status: ${st}`;
+  }
+
+  const activities = p.activities || [];
+
+  // 2. ИГРОВАЯ АКТИВНОСТЬ (например: Fortnite, CS2, Dota 2, Roblox, Xbox)
+  const gameAct = activities.find(a => 
+    a.type === 0 || 
+    (a.name && !/dotify|spotify|music|яндекс|yandex|soundcloud|vk/i.test(a.name) && a.type !== 2 && a.type !== 4)
+  );
+
+  const dsGameBadge = $('ds-game-badge');
+  const dsValDefault = $('ds-val-default');
+  const dsGameView = $('ds-game-view');
+  const dsGameName = $('ds-game-name');
+  const dsGameDesc = $('ds-game-desc');
+
+  if (gameAct) {
+    if (dsGameBadge) dsGameBadge.style.display = 'inline-flex';
+    if (dsValDefault) dsValDefault.style.display = 'none';
+    if (dsGameView) dsGameView.style.display = 'flex';
+    if (dsGameName) dsGameName.textContent = gameAct.name;
+
+    let desc = gameAct.details || gameAct.state || '';
+    if (gameAct.timestamps && gameAct.timestamps.start) {
+      const elapsedMs = Math.max(0, Date.now() - gameAct.timestamps.start);
+      const h = Math.floor(elapsedMs / 3600000);
+      const m = Math.floor((elapsedMs % 3600000) / 60000);
+      const timeStr = h > 0 ? `${h}h ${m}m in game` : `${m}m in game`;
+      desc = desc ? `${desc} · ${timeStr}` : timeStr;
+    }
+    if (dsGameDesc) dsGameDesc.textContent = desc || 'playing now';
+  } else {
+    if (dsGameBadge) dsGameBadge.style.display = 'none';
+    if (dsValDefault) dsValDefault.style.display = 'flex';
+    if (dsGameView) dsGameView.style.display = 'none';
+  }
+
+  // 3. МУЗЫКАЛЬНАЯ АКТИВНОСТЬ (Dotify / Spotify / Яндекс Музыка)
+  // А) Проверка Spotify через прямой модуль Lanyard
+  if (p.listening_to_spotify && p.spotify) {
+    const sp = p.spotify;
+    const start = sp.timestamps.start;
+    const end = sp.timestamps.end;
+    const progress = Math.max(0, Math.floor((Date.now() - start) / 1000));
+    const duration = Math.max(1, Math.floor((end - start) / 1000));
+
+    applyLiveMusic({
+      title: sp.song,
+      artist: sp.artist,
+      coverUrl: sp.album_art_url,
+      startMs: start,
+      duration,
+      progress,
+      source: 'Spotify'
+    });
+    return;
+  }
+
+  // Б) Проверка Dotify / Яндекс Музыки через Discord RPC
+  const musicAct = activities.find(a => 
+    a.type === 2 || 
+    (a.name && /dotify|яндекс|yandex|music|soundcloud|vk/i.test(a.name))
+  );
+
+  if (musicAct) {
+    let cover = '';
+    if (musicAct.assets && musicAct.assets.large_image) {
+      cover = musicAct.assets.large_image.startsWith('mp:external')
+        ? musicAct.assets.large_image.replace(/^mp:external\/[^\/]+\/(https?)\//, '$1://')
+        : `https://cdn.discordapp.com/app-assets/${musicAct.application_id}/${musicAct.assets.large_image}.png`;
+    }
+
+    const start = musicAct.timestamps && musicAct.timestamps.start ? musicAct.timestamps.start : Date.now();
+    const end = musicAct.timestamps && musicAct.timestamps.end ? musicAct.timestamps.end : null;
+    const progress = Math.max(0, Math.floor((Date.now() - start) / 1000));
+    const duration = end ? Math.max(1, Math.floor((end - start) / 1000)) : 210;
+
+    applyLiveMusic({
+      title: musicAct.details || musicAct.name,
+      artist: musicAct.state || 'Playing',
+      coverUrl: cover,
+      startMs: start,
+      duration,
+      progress,
+      source: musicAct.name || 'Dotify'
+    });
+    return;
+  }
+
+  // Если музыка сейчас не играет
+  if (isLivePlaying) {
+    setPlayerIdle();
+  }
+}
+
+// Резервный HTTP-опрос (если WebSocket заблокирован провайдером или отвалился)
+async function fetchLanyardUser() {
+  if (!CONFIG.discordId) return;
+
+  const url = `https://api.lanyard.rest/v1/users/${CONFIG.discordId}`;
+  try {
+    const res = await fetch(url, { headers: { 'Accept': 'application/json' } });
+    if (!res.ok) return;
+    const json = await res.json();
+    if (json && json.success && json.data) {
+      handlePresence(json.data);
+    }
+  } catch (e) {}
+}
+
+function startLanyardPolling() {
+  if (isLanyardPolling) return;
+  isLanyardPolling = true;
+  fetchLanyardUser();
+  if (!lanyardPollTimer) {
+    lanyardPollTimer = setInterval(fetchLanyardUser, 5000);
+  }
+}
+
+function stopLanyardPolling() {
+  isLanyardPolling = false;
+  if (lanyardPollTimer) {
+    clearInterval(lanyardPollTimer);
+    lanyardPollTimer = null;
+  }
+}
+
 function initLanyard() {
   if (!CONFIG.discordId) return;
 
-  const ws = new WebSocket('wss://api.lanyard.rest/socket');
-  let heartbeatInterval;
+  // Всегда запускаем первоначальный опрос сразу для быстрого ответа
+  startLanyardPolling();
 
-  ws.onopen = () => {
-    // Подписка на пользователя
-    ws.send(JSON.stringify({
-      op: 2,
-      d: { subscribe_to_id: CONFIG.discordId }
-    }));
-  };
-
-  ws.onmessage = (event) => {
-    try {
-      const data = JSON.parse(event.data);
-      if (data.op === 1) { // Hello packet
-        heartbeatInterval = setInterval(() => {
-          ws.send(JSON.stringify({ op: 3 }));
-        }, data.d.heartbeat_interval);
-      } else if (data.t === 'INIT_STATE' || data.t === 'PRESENCE_UPDATE') {
-        handlePresence(data.d);
-      }
-    } catch (e) {}
-  };
-
-  ws.onclose = () => {
-    clearInterval(heartbeatInterval);
-    setTimeout(initLanyard, 10000); // авто-переподключение
-  };
-
-  function handlePresence(p) {
-    // Проверка 1: Spotify
-    if (p.listening_to_spotify && p.spotify) {
-      const sp = p.spotify;
-      const start = sp.timestamps.start;
-      const end = sp.timestamps.end;
-      const progress = Math.max(0, Math.floor((Date.now() - start) / 1000));
-      const duration = Math.max(1, Math.floor((end - start) / 1000));
-
-      applyLiveMusic({
-        title: sp.song,
-        artist: sp.artist,
-        coverUrl: sp.album_art_url,
-        startMs: start,
-        duration,
-        progress,
-        source: 'Spotify / Dotify'
-      });
-      return;
+  try {
+    if (lanyardWs) {
+      try { lanyardWs.close(); } catch (e) {}
     }
+    lanyardWs = new WebSocket('wss://api.lanyard.rest/socket');
 
-    // Проверка 2: Dotify / Яндекс Музыка через Discord RPC
-    if (p.activities && p.activities.length) {
-      const musicAct = p.activities.find(a => 
-        (a.name && (a.name.toLowerCase().includes('dotify') || a.name.toLowerCase().includes('яндекс') || a.name.toLowerCase().includes('yandex') || a.name.toLowerCase().includes('music'))) ||
-        (a.details && a.state)
-      );
+    lanyardWs.onopen = () => {
+      lanyardWs.send(JSON.stringify({
+        op: 2,
+        d: { subscribe_to_id: CONFIG.discordId }
+      }));
+    };
 
-      if (musicAct) {
-        let cover = '';
-        if (musicAct.assets && musicAct.assets.large_image) {
-          cover = musicAct.assets.large_image.startsWith('mp:external')
-            ? musicAct.assets.large_image.replace(/mp:external\/[^\/]+\/https\//, 'https://')
-            : `https://cdn.discordapp.com/app-assets/${musicAct.application_id}/${musicAct.assets.large_image}.png`;
+    lanyardWs.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        if (data.op === 1) { // Hello packet
+          clearInterval(lanyardHeartbeat);
+          lanyardHeartbeat = setInterval(() => {
+            if (lanyardWs && lanyardWs.readyState === WebSocket.OPEN) {
+              lanyardWs.send(JSON.stringify({ op: 3 }));
+            }
+          }, data.d.heartbeat_interval);
+        } else if (data.t === 'INIT_STATE' || data.t === 'PRESENCE_UPDATE') {
+          handlePresence(data.d);
         }
+      } catch (e) {}
+    };
 
-        const start = musicAct.timestamps && musicAct.timestamps.start ? musicAct.timestamps.start : Date.now();
-        const end = musicAct.timestamps && musicAct.timestamps.end ? musicAct.timestamps.end : null;
-        const progress = Math.max(0, Math.floor((Date.now() - start) / 1000));
-        const duration = end ? Math.max(1, Math.floor((end - start) / 1000)) : 210;
+    lanyardWs.onerror = () => {
+      startLanyardPolling();
+    };
 
-        applyLiveMusic({
-          title: musicAct.details || musicAct.name,
-          artist: musicAct.state || 'Playing',
-          coverUrl: cover,
-          startMs: start,
-          duration,
-          progress,
-          source: musicAct.name || 'Dotify'
-        });
-        return;
-      }
-    }
-
-    // Если сейчас ничего не играет
-    if (isLivePlaying) {
-      setPlayerIdle();
-    }
+    lanyardWs.onclose = () => {
+      clearInterval(lanyardHeartbeat);
+      startLanyardPolling();
+      setTimeout(initLanyard, 12000);
+    };
+  } catch (e) {
+    startLanyardPolling();
   }
 }
 
@@ -773,6 +870,12 @@ if (cardDiscord) {
     const tag = CONFIG.discordTag || 'fanet666';
     navigator.clipboard.writeText(tag).then(() => {
       const badge = $('ds-badge');
+      const gameBadgeText = $('ds-game-badge-text');
+      if (gameBadgeText && $('ds-game-badge') && $('ds-game-badge').style.display !== 'none') {
+        const oldText = gameBadgeText.textContent;
+        gameBadgeText.textContent = 'copied tag!';
+        setTimeout(() => { gameBadgeText.textContent = oldText; }, 1800);
+      }
       if (badge) {
         badge.textContent = 'copied!';
         badge.style.color = 'var(--accent)';
