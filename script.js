@@ -617,7 +617,7 @@ function applyLiveMusic(track) {
   const dot = document.querySelector('.np-dot');
   if (statusPill) statusPill.classList.remove('idle');
   if (dot) dot.classList.remove('idle');
-  if (npStatusText) npStatusText.textContent = `now playing · ${track.source || 'Dotify'}`;
+  if (npStatusText) npStatusText.textContent = 'now playing';
 
   if (track.coverUrl) {
     if (npCover) {
