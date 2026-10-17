@@ -848,6 +848,7 @@ async function fetchLanyardUser() {
   const endpoints = [
     rawUrl,
     `https://lanyard.rest/v1/users/${CONFIG.discordId}`,
+    `https://api.allorigins.win/get?url=${encodeURIComponent(rawUrl)}`,
     `https://api.allorigins.win/raw?url=${encodeURIComponent(rawUrl)}`
   ];
 
@@ -860,7 +861,12 @@ async function fetchLanyardUser() {
       if (!res.ok) continue;
       const text = await res.text();
       let json = null;
-      try { json = JSON.parse(text); } catch (e) {}
+      try {
+        json = JSON.parse(text);
+        if (json && json.contents && typeof json.contents === 'string') {
+          json = JSON.parse(json.contents);
+        }
+      } catch (e) {}
       if (json && json.data) {
         handlePresence(json.data);
         return;
