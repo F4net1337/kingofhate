@@ -714,11 +714,16 @@ function handlePresence(p) {
 
   if (gameAct) {
     if (dsGameBadge) dsGameBadge.style.display = 'inline-flex';
+    const dsGameBadgeText = $('ds-game-badge-text');
+    if (dsGameBadgeText && dsGameBadgeText.textContent !== 'copied tag!') {
+      dsGameBadgeText.textContent = gameAct.type === 1 ? 'streaming' : 'playing';
+    }
     if (dsValDefault) dsValDefault.style.display = 'none';
     if (dsGameView) dsGameView.style.display = 'flex';
     if (dsGameName) dsGameName.textContent = gameAct.name;
 
-    let desc = gameAct.details || gameAct.state || '';
+    const parts = [gameAct.details, gameAct.state].filter(Boolean);
+    let desc = parts.join(' · ');
     if (gameAct.timestamps && gameAct.timestamps.start) {
       const elapsedMs = Math.max(0, Date.now() - gameAct.timestamps.start);
       const h = Math.floor(elapsedMs / 3600000);
@@ -760,11 +765,16 @@ function handlePresence(p) {
   if (musicAct) {
     let cover = '';
     if (musicAct.assets && musicAct.assets.large_image) {
-      cover = musicAct.assets.large_image.startsWith('mp:external')
-        ? musicAct.assets.large_image.replace(/^mp:external\/[^\/]+\/(https?)\//, '$1://')
-        : (musicAct.assets.large_image.startsWith('http')
-            ? musicAct.assets.large_image
-            : `https://cdn.discordapp.com/app-assets/${musicAct.application_id}/${musicAct.assets.large_image}.png`);
+      const img = musicAct.assets.large_image;
+      if (img.startsWith('spotify:')) {
+        cover = `https://i.scdn.co/image/${img.slice(8)}`;
+      } else if (img.startsWith('mp:external')) {
+        cover = img.replace(/^mp:external\/[^\/]+\/(https?)\//, '$1://');
+      } else if (img.startsWith('http')) {
+        cover = img;
+      } else {
+        cover = `https://cdn.discordapp.com/app-assets/${musicAct.application_id}/${img}.png`;
+      }
     }
 
     const start = musicAct.timestamps && musicAct.timestamps.start ? musicAct.timestamps.start : Date.now();
@@ -1009,8 +1019,8 @@ if (CONFIG.lastfmUser) {
   setInterval(pollLastFm, 8000);
 }
 
-initLanyard();
 setPlayerIdle();
+initLanyard();
 
 // ── 8. DISCORD CLICK-TO-COPY ───────────────────────────
 const cardDiscord = $('card-discord');
