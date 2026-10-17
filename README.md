@@ -1,7 +1,7 @@
 <div align="center">
 
-# 🌿 kingofhate
-### *«dont want to do anything :3»*
+#  kingofhate
+
 
 [![Website](https://img.shields.io/badge/website-kingofhate-10b981?style=for-the-badge&logo=googlechrome&logoColor=white)](https://f4net1337.github.io/kingofhate/)
 [![Telegram](https://img.shields.io/badge/telegram-@kingofhatte-22c55e?style=for-the-badge&logo=telegram&logoColor=white)](https://t.me/kingofhatte)
