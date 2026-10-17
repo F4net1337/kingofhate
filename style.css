@@ -1020,6 +1020,98 @@ b {
   transition: all .2s;
 }
 
+.ds-icon {
+  position: relative;
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  background: var(--card-2);
+  border: 1px solid var(--line);
+  display: grid;
+  place-items: center;
+  color: var(--accent);
+  flex: none;
+  transition: all .25s ease;
+}
+
+.ds-status-dot {
+  position: absolute;
+  bottom: -3px;
+  right: -3px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 2px solid var(--card);
+  background: #64748b;
+  transition: background-color .3s, box-shadow .3s;
+}
+.ds-status-dot.online { background: #10b981; box-shadow: 0 0 8px rgba(16, 185, 129, 0.7); }
+.ds-status-dot.idle { background: #f59e0b; box-shadow: 0 0 8px rgba(245, 158, 11, 0.7); }
+.ds-status-dot.dnd { background: #ef4444; box-shadow: 0 0 8px rgba(239, 68, 68, 0.7); }
+.ds-status-dot.offline { background: #64748b; }
+
+.ds-header-line {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 2px;
+}
+
+.game-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  color: #34d399;
+  background: rgba(16, 185, 129, 0.12);
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  padding: 1px 7px;
+  border-radius: 999px;
+  line-height: 1.4;
+}
+
+.game-live-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #34d399;
+  box-shadow: 0 0 6px #34d399;
+  animation: pulseDot 1.8s infinite;
+}
+
+@keyframes pulseDot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(0.85); }
+}
+
+.game-view {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.game-title {
+  font-size: 17px;
+  font-weight: 700;
+  color: #fff;
+  letter-spacing: -.02em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.game-desc {
+  font-size: 12px;
+  color: var(--soft);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .tile.ds:hover .badge-copy {
   border-color: rgba(88, 101, 242, 0.5);
   color: #fff;
