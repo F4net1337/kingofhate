@@ -840,51 +840,42 @@ function parseSvgPresence(svg) {
   }
 }
 
-// Резервный HTTP-опрос через прямые и CORS-проксированные эндпоинты
+// Резервный HTTP-опрос через прямой эндпоинт и CORS-прокси
 async function fetchLanyardUser() {
   if (!CONFIG.discordId) return;
 
   const rawUrl = `https://api.lanyard.rest/v1/users/${CONFIG.discordId}`;
-  const endpoints = [
-    rawUrl,
-    `https://lanyard.rest/v1/users/${CONFIG.discordId}`,
-    `https://api.allorigins.win/get?url=${encodeURIComponent(rawUrl)}`,
-    `https://api.allorigins.win/raw?url=${encodeURIComponent(rawUrl)}`
-  ];
 
-  for (const ep of endpoints) {
-    try {
-      const ctrl = new AbortController();
-      const timer = setTimeout(() => ctrl.abort(), 3500);
-      const res = await fetch(ep, { signal: ctrl.signal, headers: { 'Accept': 'application/json' } });
-      clearTimeout(timer);
-      if (!res.ok) continue;
-      const text = await res.text();
-      let json = null;
-      try {
-        json = JSON.parse(text);
-        if (json && json.contents && typeof json.contents === 'string') {
-          json = JSON.parse(json.contents);
-        }
-      } catch (e) {}
+  // 1. Прямой запрос к Lanyard API (сверхбыстрый, 300мс с Zapret или за пределами РФ)
+  try {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 2800);
+    const res = await fetch(rawUrl, { signal: ctrl.signal, headers: { 'Accept': 'application/json' } });
+    clearTimeout(timer);
+    if (res.ok) {
+      const json = await res.json();
       if (json && json.data) {
         handlePresence(json.data);
         return;
       }
-    } catch (e) {}
-  }
+    }
+  } catch (e) {}
 
-  // Резервный опрос через SVG-карточку cnrad.dev (100% стабильный Cloudflare)
+  // 2. Резервный прокси через allorigins.win (для пользователей из РФ без Zapret / VPN)
   try {
-    const svgUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(`https://lanyard.cnrad.dev/api/${CONFIG.discordId}`)}`;
+    const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(rawUrl)}`;
     const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), 4000);
-    const res = await fetch(svgUrl, { signal: ctrl.signal });
+    const timer = setTimeout(() => ctrl.abort(), 6500);
+    const res = await fetch(proxyUrl, { signal: ctrl.signal });
     clearTimeout(timer);
     if (res.ok) {
-      const svg = await res.text();
-      if (svg && svg.includes('<svg')) {
-        parseSvgPresence(svg);
+      const data = await res.json();
+      if (data && data.contents) {
+        const parsed = JSON.parse(data.contents);
+        if (parsed && parsed.data) {
+          handlePresence(parsed.data);
+          return;
+        }
       }
     }
   } catch (e) {}
@@ -895,7 +886,7 @@ function startLanyardPolling() {
   isLanyardPolling = true;
   fetchLanyardUser();
   if (!lanyardPollTimer) {
-    lanyardPollTimer = setInterval(fetchLanyardUser, 4000);
+    lanyardPollTimer = setInterval(fetchLanyardUser, 3000);
   }
 }
 
@@ -910,16 +901,25 @@ function stopLanyardPolling() {
 function initLanyard() {
   if (!CONFIG.discordId) return;
 
-  // Всегда запускаем первоначальный опрос сразу для быстрого ответа
+  // Всегда запускаем HTTP-опрос сразу для мгновенного ответа
   startLanyardPolling();
 
+  let wsConnectTimeout = null;
   try {
     if (lanyardWs) {
       try { lanyardWs.close(); } catch (e) {}
     }
     lanyardWs = new WebSocket('wss://api.lanyard.rest/socket');
 
+    wsConnectTimeout = setTimeout(() => {
+      // Если сокет не открылся за 3 секунды, закрываем его, чтобы не держать висящее соединение
+      if (lanyardWs && lanyardWs.readyState !== WebSocket.OPEN) {
+        try { lanyardWs.close(); } catch (e) {}
+      }
+    }, 3000);
+
     lanyardWs.onopen = () => {
+      clearTimeout(wsConnectTimeout);
       lanyardWs.send(JSON.stringify({
         op: 2,
         d: { subscribe_to_id: CONFIG.discordId }
@@ -943,13 +943,14 @@ function initLanyard() {
     };
 
     lanyardWs.onerror = () => {
+      clearTimeout(wsConnectTimeout);
       startLanyardPolling();
     };
 
     lanyardWs.onclose = () => {
+      clearTimeout(wsConnectTimeout);
       clearInterval(lanyardHeartbeat);
       startLanyardPolling();
-      setTimeout(initLanyard, 12000);
     };
   } catch (e) {
     startLanyardPolling();
