@@ -16,19 +16,11 @@
 
 ### 🍵 About Me
 - 🌙 **Nickname / Aliases:** kingofhate · fanet · fanet666
-- 📍 **Location:** Ekaterinburg, UTC+5 (MSK+2)
+- 📍 **Location:** Ekaterinburg
 - 📸 **Instagram:** [@kiingofhate](https://www.instagram.com/kiingofhate?xtok=MWNrcDU1c2J2bXZwNA==)
-- 🎮 **Interests:** gaming, chill music, aesthetics
+- 🎮 **Interests:** none
 - 💬 **Current Mood:** `dont want to do anything :3`
 - 🌐 **Personal Space:** [f4net1337.github.io/kingofhate](https://f4net1337.github.io/kingofhate/)
-
----
-
-### 🎧 Features of My Space
-- 🎵 **Live Music Integration** — real-time listening status via Dotify / Discord RPC
-- 🐾 **Global Petting Counter** — interactive cat synchronized across all visitors
-- 🌌 **Shader Waves** — dynamic dark emerald WebGL2 ambient background
-- ⏱️ **Live Clock & Day Progress** — real-time EKB time & day progress tracker
 
 ---
 
