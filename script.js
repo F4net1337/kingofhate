@@ -352,16 +352,20 @@ const MOODS = [
   [100, 'you live here now']
 ];
 
-const PETS_API_READ = 'https://counterapi.com/api/kingofhate/pets/cat?readOnly=true';
-const PETS_API_UP = 'https://counterapi.com/api/kingofhate/pets/cat';
+// Надежный постоянный Key-Value счетчик с атомарным инкрементом и полной поддержкой CORS
+const PETS_KEY = 'vsmak6mh';
+const PETS_API_READ = `https://keyvalue.immanuel.co/api/KeyVal/GetValue/${PETS_KEY}/pets`;
+const PETS_API_INC = `https://keyvalue.immanuel.co/api/KeyVal/ActOnValue/${PETS_KEY}/pets/increment`;
+
+const PETS_BASELINE = 715;
 
 let myPets = 0;
-let totalPets = 0;
+let totalPets = PETS_BASELINE;
 
 try {
   myPets = parseInt(localStorage.getItem('rin_green_mypets'), 10) || 0;
   const cachedTotal = parseInt(localStorage.getItem('rin_green_totalpets'), 10) || 0;
-  totalPets = Math.max(cachedTotal, myPets);
+  totalPets = Math.max(cachedTotal, myPets, PETS_BASELINE);
 } catch (e) {}
 
 function renderCatCaption() {
@@ -387,7 +391,7 @@ const updateCatCap = renderCatCaption;
 function renderPets(bump = false) {
   const petsEl = $('pets');
   const moodEl = $('mood');
-  const displayTotal = Math.max(totalPets, myPets);
+  const displayTotal = Math.max(totalPets, myPets, PETS_BASELINE);
   if (petsEl) petsEl.textContent = displayTotal.toLocaleString('en-US');
 
   let moodStr = '';
@@ -404,49 +408,66 @@ function renderPets(bump = false) {
 }
 renderPets(false);
 
-// Загрузка глобального счетчика со всего мира
+// Синхронизация общего счётчика всех пользователей в мире
 async function fetchGlobalPets() {
   try {
-    const res = await fetch(PETS_API_READ);
+    const res = await fetch(PETS_API_READ, { cache: 'no-store' });
     if (!res.ok) return;
-    const data = await res.json();
-    if (typeof data.value === 'number') {
-      totalPets = Math.max(totalPets, myPets, data.value);
+    const raw = await res.text();
+    const clean = raw.replace(/["\s]/g, '');
+    const val = parseInt(clean, 10);
+    if (!isNaN(val) && val > 0) {
+      totalPets = Math.max(totalPets, val, myPets, PETS_BASELINE);
       try { localStorage.setItem('rin_green_totalpets', totalPets); } catch (e) {}
       renderPets(false);
     }
   } catch (e) {}
 }
 fetchGlobalPets();
-// Фоновая синхронизация каждые 12 секунд
-setInterval(fetchGlobalPets, 12000);
+// Фоновый опрос каждые 7 секунд для мгновенного отображения кликов с других устройств
+setInterval(fetchGlobalPets, 7000);
 
 let pendingPetSync = 0;
 let petDebounceTimer = null;
 
 function syncPetIncrement() {
   pendingPetSync++;
-  if (!petDebounceTimer) {
-    petDebounceTimer = setTimeout(async () => {
-      petDebounceTimer = null;
-      const count = pendingPetSync;
-      pendingPetSync = 0;
-      for (let i = 0; i < count; i++) {
-        try {
-          const res = await fetch(PETS_API_UP);
-          if (res.ok) {
-            const data = await res.json();
-            if (typeof data.value === 'number') {
-              totalPets = Math.max(totalPets, myPets, data.value);
-              try { localStorage.setItem('rin_green_totalpets', totalPets); } catch (e) {}
-              renderPets(false);
-            }
-          }
-        } catch (e) {}
-      }
-    }, 150);
-  }
+  if (petDebounceTimer) clearTimeout(petDebounceTimer);
+  petDebounceTimer = setTimeout(flushPetSync, 250);
 }
+
+async function flushPetSync() {
+  if (pendingPetSync <= 0) return;
+  const count = pendingPetSync;
+  pendingPetSync = 0;
+
+  try {
+    const batchSize = 4;
+    for (let i = 0; i < count; i += batchSize) {
+      const batch = [];
+      const end = Math.min(count, i + batchSize);
+      for (let j = i; j < end; j++) {
+        batch.push(
+          fetch(PETS_API_INC, {
+            method: 'POST',
+            body: '',
+            keepalive: true
+          })
+        );
+      }
+      await Promise.allSettled(batch);
+    }
+  } catch (e) {}
+
+  // Сразу запрашиваем актуальное значение с сервера
+  fetchGlobalPets();
+}
+
+window.addEventListener('beforeunload', () => {
+  if (pendingPetSync > 0) {
+    flushPetSync();
+  }
+});
 
 const PET_FACES = ['happy', 'squint', 'hearts', 'stars', 'content', 'shiny'];
 let lastFace = '';
@@ -455,7 +476,7 @@ let blushTimer;
 
 function handlePet(x, y) {
   myPets++;
-  totalPets = Math.max(totalPets + 1, myPets);
+  totalPets = Math.max(totalPets + 1, myPets, PETS_BASELINE);
   try {
     localStorage.setItem('rin_green_mypets', myPets);
     localStorage.setItem('rin_green_totalpets', totalPets);
