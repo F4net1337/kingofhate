@@ -360,6 +360,8 @@ let totalPets = 0;
 
 try {
   myPets = parseInt(localStorage.getItem('rin_green_mypets'), 10) || 0;
+  const cachedTotal = parseInt(localStorage.getItem('rin_green_totalpets'), 10) || 0;
+  totalPets = Math.max(cachedTotal, myPets);
 } catch (e) {}
 
 function renderCatCaption() {
@@ -385,7 +387,8 @@ const updateCatCap = renderCatCaption;
 function renderPets(bump = false) {
   const petsEl = $('pets');
   const moodEl = $('mood');
-  if (petsEl) petsEl.textContent = totalPets.toLocaleString('en-US');
+  const displayTotal = Math.max(totalPets, myPets);
+  if (petsEl) petsEl.textContent = displayTotal.toLocaleString('en-US');
 
   let moodStr = '';
   for (const [n, m] of MOODS) if (myPets >= n) moodStr = m;
@@ -408,7 +411,8 @@ async function fetchGlobalPets() {
     if (!res.ok) return;
     const data = await res.json();
     if (typeof data.value === 'number') {
-      totalPets = Math.max(totalPets, data.value);
+      totalPets = Math.max(totalPets, myPets, data.value);
+      try { localStorage.setItem('rin_green_totalpets', totalPets); } catch (e) {}
       renderPets(false);
     }
   } catch (e) {}
@@ -433,7 +437,8 @@ function syncPetIncrement() {
           if (res.ok) {
             const data = await res.json();
             if (typeof data.value === 'number') {
-              totalPets = Math.max(totalPets, data.value);
+              totalPets = Math.max(totalPets, myPets, data.value);
+              try { localStorage.setItem('rin_green_totalpets', totalPets); } catch (e) {}
               renderPets(false);
             }
           }
@@ -450,8 +455,11 @@ let blushTimer;
 
 function handlePet(x, y) {
   myPets++;
-  totalPets++;
-  try { localStorage.setItem('rin_green_mypets', myPets); } catch (e) {}
+  totalPets = Math.max(totalPets + 1, myPets);
+  try {
+    localStorage.setItem('rin_green_mypets', myPets);
+    localStorage.setItem('rin_green_totalpets', totalPets);
+  } catch (e) {}
   updateCatCap();
   renderPets(true);
   syncPetIncrement();
@@ -643,6 +651,24 @@ let lanyardHeartbeat = null;
 let lanyardPollTimer = null;
 let isLanyardPolling = false;
 
+function isMusicActivity(a) {
+  if (!a) return false;
+  if (a.type === 2) return true;
+  const name = (a.name || '').toLowerCase();
+  const details = (a.details || '').toLowerCase();
+  const state = (a.state || '').toLowerCase();
+  return /dotify|spotify|яндекс|yandex|soundcloud|apple music|vk music/i.test(name) ||
+         /dotify|spotify|soundcloud/i.test(details) ||
+         /dotify|spotify|soundcloud/i.test(state);
+}
+
+function isGameActivity(a) {
+  if (!a) return false;
+  if (isMusicActivity(a)) return false;
+  // Type 0 is Playing/Game, 1 is Streaming, 5 is Competing
+  return a.type === 0 || a.type === 1 || a.type === 5;
+}
+
 function handlePresence(p) {
   if (!p) return;
 
@@ -657,10 +683,7 @@ function handlePresence(p) {
   const activities = p.activities || [];
 
   // 2. ИГРОВАЯ АКТИВНОСТЬ (например: Fortnite, CS2, Dota 2, Roblox, Xbox)
-  const gameAct = activities.find(a => 
-    a.type === 0 || 
-    (a.name && !/dotify|spotify|music|яндекс|yandex|soundcloud|vk/i.test(a.name) && a.type !== 2 && a.type !== 4)
-  );
+  const gameAct = activities.find(isGameActivity);
 
   const dsGameBadge = $('ds-game-badge');
   const dsValDefault = $('ds-val-default');
@@ -711,17 +734,16 @@ function handlePresence(p) {
   }
 
   // Б) Проверка Dotify / Яндекс Музыки через Discord RPC
-  const musicAct = activities.find(a => 
-    a.type === 2 || 
-    (a.name && /dotify|яндекс|yandex|music|soundcloud|vk/i.test(a.name))
-  );
+  const musicAct = activities.find(isMusicActivity);
 
   if (musicAct) {
     let cover = '';
     if (musicAct.assets && musicAct.assets.large_image) {
       cover = musicAct.assets.large_image.startsWith('mp:external')
         ? musicAct.assets.large_image.replace(/^mp:external\/[^\/]+\/(https?)\//, '$1://')
-        : `https://cdn.discordapp.com/app-assets/${musicAct.application_id}/${musicAct.assets.large_image}.png`;
+        : (musicAct.assets.large_image.startsWith('http')
+            ? musicAct.assets.large_image
+            : `https://cdn.discordapp.com/app-assets/${musicAct.application_id}/${musicAct.assets.large_image}.png`);
     }
 
     const start = musicAct.timestamps && musicAct.timestamps.start ? musicAct.timestamps.start : Date.now();
@@ -747,17 +769,117 @@ function handlePresence(p) {
   }
 }
 
-// Резервный HTTP-опрос (если WebSocket заблокирован провайдером или отвалился)
+// Парсинг резервного SVG-виджета присутствия от cnrad.dev
+function parseSvgPresence(svg) {
+  if (!svg) return;
+
+  // 1. Статус пользователя
+  let st = 'offline';
+  if (svg.includes('#43B581')) st = 'online';
+  else if (svg.includes('#FAA61A')) st = 'idle';
+  else if (svg.includes('#F04747')) st = 'dnd';
+  else if (svg.includes('#593695')) st = 'streaming';
+
+  const statusDot = $('ds-status-dot');
+  if (statusDot) {
+    statusDot.className = `ds-status-dot ${st}`;
+    statusDot.title = `status: ${st}`;
+  }
+
+  // 2. Музыка в SVG (Listening to Spotify... / Listening to Dotify...)
+  const musicMatch = svg.match(/Listening to\s+([A-Za-z0-9_\-\s]+)\.\.\./i);
+  if (musicMatch) {
+    const srcName = musicMatch[1] ? musicMatch[1].trim() : 'Dotify';
+    const pMatches = [...svg.matchAll(/<p[^>]*>(.*?)<\/p>/g)].map(m => m[1]);
+    const title = pMatches[1] || 'Music Track';
+    const artistRaw = pMatches[2] || '';
+    const artist = artistRaw.replace(/^By\s+/i, '');
+
+    let cover = '';
+    const imgMatch = svg.match(/<img[^>]*src="(data:image\/[^"]+)"[^>]*alt="Album Cover"/i);
+    if (imgMatch) cover = imgMatch[1];
+
+    applyLiveMusic({
+      title,
+      artist,
+      coverUrl: cover,
+      source: srcName,
+      duration: 180,
+      progress: 30
+    });
+  } else if (isLivePlaying && !liveTrackData) {
+    setPlayerIdle();
+  }
+
+  // 3. Игра в SVG (например Fortnite)
+  const isDoingNothing = svg.includes("I&#x27;m not currently doing anything!") || svg.includes("not currently doing anything");
+  const dsGameBadge = $('ds-game-badge');
+  const dsValDefault = $('ds-val-default');
+  const dsGameView = $('ds-game-view');
+  const dsGameName = $('ds-game-name');
+  const dsGameDesc = $('ds-game-desc');
+
+  if (!isDoingNothing && !musicMatch) {
+    const pMatches = [...svg.matchAll(/<p[^>]*>(.*?)<\/p>/g)].map(m => m[1]);
+    if (pMatches.length >= 1) {
+      const gName = pMatches[0];
+      const gDesc = pMatches[1] || 'in game';
+      if (dsGameBadge) dsGameBadge.style.display = 'inline-flex';
+      if (dsValDefault) dsValDefault.style.display = 'none';
+      if (dsGameView) dsGameView.style.display = 'flex';
+      if (dsGameName) dsGameName.textContent = gName;
+      if (dsGameDesc) dsGameDesc.textContent = gDesc;
+      return;
+    }
+  }
+
+  if (isDoingNothing || musicMatch) {
+    if (dsGameBadge) dsGameBadge.style.display = 'none';
+    if (dsValDefault) dsValDefault.style.display = 'flex';
+    if (dsGameView) dsGameView.style.display = 'none';
+  }
+}
+
+// Резервный HTTP-опрос через прямые и CORS-проксированные эндпоинты
 async function fetchLanyardUser() {
   if (!CONFIG.discordId) return;
 
-  const url = `https://api.lanyard.rest/v1/users/${CONFIG.discordId}`;
+  const rawUrl = `https://api.lanyard.rest/v1/users/${CONFIG.discordId}`;
+  const endpoints = [
+    rawUrl,
+    `https://lanyard.rest/v1/users/${CONFIG.discordId}`,
+    `https://api.allorigins.win/raw?url=${encodeURIComponent(rawUrl)}`
+  ];
+
+  for (const ep of endpoints) {
+    try {
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), 3500);
+      const res = await fetch(ep, { signal: ctrl.signal, headers: { 'Accept': 'application/json' } });
+      clearTimeout(timer);
+      if (!res.ok) continue;
+      const text = await res.text();
+      let json = null;
+      try { json = JSON.parse(text); } catch (e) {}
+      if (json && json.data) {
+        handlePresence(json.data);
+        return;
+      }
+    } catch (e) {}
+  }
+
+  // Резервный опрос через SVG-карточку cnrad.dev (100% стабильный Cloudflare)
   try {
-    const res = await fetch(url, { headers: { 'Accept': 'application/json' } });
-    if (!res.ok) return;
-    const json = await res.json();
-    if (json && json.success && json.data) {
-      handlePresence(json.data);
+    const svgUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(`https://lanyard.cnrad.dev/api/${CONFIG.discordId}`)}`;
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 4000);
+    const res = await fetch(svgUrl, { signal: ctrl.signal });
+    clearTimeout(timer);
+    if (res.ok) {
+      const svg = await res.text();
+      if (svg && svg.includes('<svg')) {
+        parseSvgPresence(svg);
+      }
     }
   } catch (e) {}
 }
@@ -767,7 +889,7 @@ function startLanyardPolling() {
   isLanyardPolling = true;
   fetchLanyardUser();
   if (!lanyardPollTimer) {
-    lanyardPollTimer = setInterval(fetchLanyardUser, 5000);
+    lanyardPollTimer = setInterval(fetchLanyardUser, 4000);
   }
 }
 
