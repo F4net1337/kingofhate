@@ -1011,15 +1011,22 @@ b {
 }
 
 .badge-copy {
-  font-size: 10px;
-  font-family: "JetBrains Mono", monospace;
-  padding: 2px 7px;
-  border-radius: 6px;
-  background: var(--card-2);
-  border: 1px solid var(--line);
-  color: var(--soft);
-  text-transform: uppercase;
-  transition: all .2s;
+  font-size: 11px;
+  font-family: "Onest", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: rgba(30, 60, 42, 0.55);
+  border: 1px solid rgba(52, 211, 153, 0.22);
+  color: var(--ink);
+  text-transform: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  line-height: 1.2;
+  transition: all .2s cubic-bezier(.25, .8, .25, 1);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
 }
 
 .ds-icon {
@@ -1115,8 +1122,10 @@ b {
 }
 
 .tile.ds:hover .badge-copy {
-  border-color: rgba(88, 101, 242, 0.5);
+  background: rgba(88, 101, 242, 0.22);
+  border-color: rgba(88, 101, 242, 0.65);
   color: #fff;
+  transform: scale(1.04);
 }
 
 /* ── FOOTER & SECRET EASTER EGG ── */
@@ -1306,18 +1315,21 @@ b {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  font-size: 11px;
-  font-family: "JetBrains Mono", monospace;
-  font-weight: 500;
+  font-size: 11.5px;
+  font-family: "Onest", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-weight: 600;
+  letter-spacing: -0.01em;
   color: var(--soft);
-  background: var(--card-2);
-  border: 1px solid var(--line);
+  background: rgba(16, 38, 26, 0.65);
+  border: 1px solid rgba(52, 211, 153, 0.18);
   padding: 3px 10px;
   border-radius: 999px;
-  transition: all .2s;
+  transition: all .2s ease;
 }
 .setup-pill:hover {
-  border-color: var(--line-2);
+  border-color: rgba(52, 211, 153, 0.4);
+  background: rgba(22, 52, 36, 0.85);
+  color: #fff;
 }
 .setup-dot {
   width: 6px;
@@ -1344,13 +1356,14 @@ b {
   display: flex;
   align-items: center;
   gap: 7px;
-  font-size: 11.5px;
+  font-family: "Onest", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-size: 12px;
   font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: .06em;
+  text-transform: capitalize;
+  letter-spacing: -0.01em;
   color: var(--accent);
   padding-left: 2px;
-  margin-bottom: 2px;
+  margin-bottom: 3px;
 }
 .setup-cat-icon {
   width: 14px;
@@ -1373,32 +1386,35 @@ b {
   justify-content: space-between;
   align-items: center;
   gap: 12px;
-  padding: 7px 12px;
-  background: var(--card-2);
-  border: 1px solid rgba(22, 43, 30, 0.65);
-  border-radius: 9px;
-  transition: all .2s cubic-bezier(.25, .8, .25, 1);
+  padding: 8px 13px;
+  background: rgba(10, 24, 16, 0.6);
+  border: 1px solid rgba(52, 211, 153, 0.1);
+  border-radius: 10px;
+  transition: all .22s cubic-bezier(.25, .8, .25, 1);
 }
 .setup-list li:hover {
-  border-color: var(--line-2);
-  background: var(--card-2-hover);
-  transform: translateX(2px);
+  border-color: rgba(52, 211, 153, 0.3);
+  background: rgba(18, 44, 30, 0.75);
+  transform: translateX(3px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
 }
 
 .setup-k {
-  font-size: 11.5px;
-  color: var(--dim);
-  font-family: "JetBrains Mono", monospace;
-  font-weight: 500;
+  font-size: 12.5px;
+  color: #94a3b8;
+  font-family: "Onest", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-weight: 600;
   flex: none;
-  text-transform: uppercase;
-  letter-spacing: .03em;
+  text-transform: none;
+  letter-spacing: -0.01em;
 }
 
 .setup-v {
   font-size: 13px;
+  font-family: "Onest", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   font-weight: 600;
-  color: var(--ink);
+  color: #f8fafc;
+  letter-spacing: -0.015em;
   text-align: right;
   white-space: nowrap;
   overflow: hidden;
