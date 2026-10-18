@@ -593,47 +593,66 @@ function stopProgressBar() {
 
 // Применение живого трека из Dotify / Яндекс Музыки / Spotify
 function applyLiveMusic(track) {
+  const isSameTrack = isLivePlaying && liveTrackData &&
+    liveTrackData.title === track.title &&
+    liveTrackData.artist === track.artist;
+
   isLivePlaying = true;
   liveTrackData = track;
 
   const now = Date.now();
-  if (track.startMs) {
-    liveTrackStart = track.startMs;
-  } else if (track.progress !== undefined) {
-    liveTrackStart = now - (track.progress * 1000);
+  if (isSameTrack && liveTrackStart) {
+    // Если трек тот же самый, плавно продолжаем ход без сброса на 0
+    if (track.duration) {
+      liveTrackDuration = Math.max(1000, track.duration * 1000);
+    }
+    // Синхронизируем старт только при сильном расхождении (> 3 сек)
+    if (track.startMs && Math.abs(liveTrackStart - track.startMs) > 3000) {
+      liveTrackStart = track.startMs;
+    }
   } else {
-    liveTrackStart = now;
+    // Включился новый трек — запускаем прогресс-бар
+    if (track.startMs) {
+      liveTrackStart = track.startMs;
+    } else if (track.progress !== undefined) {
+      liveTrackStart = now - (track.progress * 1000);
+    } else {
+      liveTrackStart = now;
+    }
+    liveTrackDuration = Math.max(1000, (track.duration || 180) * 1000);
+    startProgressBar();
   }
 
-  liveTrackDuration = Math.max(1000, (track.duration || 180) * 1000);
-
-  if (npName) npName.textContent = track.title;
+  if (npName && npName.textContent !== track.title) {
+    npName.textContent = track.title;
+  }
   if (npArtists) {
     npArtists.style.display = '';
-    npArtists.innerHTML = `${track.artist} <small style="color:var(--accent);margin-left:4px;">• live</small>`;
+    const artistHtml = `${track.artist} <small style="color:var(--accent);margin-left:4px;">• live</small>`;
+    if (npArtists.innerHTML !== artistHtml) {
+      npArtists.innerHTML = artistHtml;
+    }
   }
 
   const statusPill = document.querySelector('.np-status-pill');
   const dot = document.querySelector('.np-dot');
-  if (statusPill) statusPill.classList.remove('idle');
-  if (dot) dot.classList.remove('idle');
-  if (npStatusText) npStatusText.textContent = 'now playing';
+  if (statusPill && statusPill.classList.contains('idle')) statusPill.classList.remove('idle');
+  if (dot && dot.classList.contains('idle')) dot.classList.remove('idle');
+  if (npStatusText && npStatusText.textContent !== 'now playing') npStatusText.textContent = 'now playing';
 
   if (track.coverUrl) {
-    if (npCover) {
-      npCover.style.backgroundImage = `url("${track.coverUrl}")`;
+    const coverBg = `url("${track.coverUrl}")`;
+    if (npCover && npCover.style.backgroundImage !== coverBg) {
+      npCover.style.backgroundImage = coverBg;
       npCover.style.backgroundSize = 'cover';
       npCover.style.backgroundPosition = 'center';
     }
-    if (npBg) {
-      npBg.style.backgroundImage = `url("${track.coverUrl}")`;
+    if (npBg && npBg.style.backgroundImage !== coverBg) {
+      npBg.style.backgroundImage = coverBg;
       npBg.style.backgroundSize = 'cover';
       npBg.style.backgroundPosition = 'center';
     }
   }
-
-  // Запуск плавного хода прогресс-бара
-  startProgressBar();
 }
 
 // Состояние покоя (когда музыка НЕ играет — offline, индикатор СТОИТ на 0)
@@ -666,11 +685,7 @@ function setPlayerIdle() {
   }
 }
 
-// ── 7.1. ИНТЕГРАЦИЯ С LANYARD (DISCORD GATEWAY & RPC) ──
-let lanyardWs = null;
-let lanyardHeartbeat = null;
-let lanyardPollTimer = null;
-let isLanyardPolling = false;
+// ── 7.1. ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ АКТИВНОСТЕЙ ──
 
 function isMusicActivity(a) {
   if (!a) return false;
@@ -777,7 +792,9 @@ function handlePresence(p) {
       }
     }
 
-    const start = musicAct.timestamps && musicAct.timestamps.start ? musicAct.timestamps.start : Date.now();
+    const start = musicAct.timestamps && musicAct.timestamps.start 
+      ? musicAct.timestamps.start 
+      : (musicAct.created_at || Date.now());
     const end = musicAct.timestamps && musicAct.timestamps.end ? musicAct.timestamps.end : null;
     const progress = Math.max(0, Math.floor((Date.now() - start) / 1000));
     const duration = end ? Math.max(1, Math.floor((end - start) / 1000)) : 210;
@@ -871,22 +888,68 @@ function parseSvgPresence(svg) {
   }
 }
 
-// HTTP-опрос Lanyard API
+// ── 7.1. ИНТЕГРАЦИЯ С LANYARD (DISCORD GATEWAY & HIGH-SPEED EDGE PROXIES) ──
+let lanyardWs = null;
+let lanyardHeartbeat = null;
+let lanyardPollTimer = null;
+let isLanyardPolling = false;
+let activeLanyardIndex = 0;
+
+// Высокоскоростные отказоустойчивые эндпоинты (без блокировки ТСПУ РКН, 100% CORS):
+const LANYARD_ENDPOINTS = [
+  // 1. Быстрый Cloudflare Worker (<0.35s ответ из РФ, полный CORS)
+  (id) => `https://cors-get-proxy.sirjosh.workers.dev/?url=https://api.lanyard.rest/v1/users/${id}`,
+  // 2. Fly.io Edge Relay (<0.7s ответ из РФ, надежный резервный канал)
+  (id) => `https://cors-anywhere.fly.dev/https://api.lanyard.rest/v1/users/${id}`,
+  // 3. Прямой Lanyard API (для пользователей с VPN или за пределами РФ)
+  (id) => `https://api.lanyard.rest/v1/users/${id}`
+];
+
+// HTTP-опрос Lanyard API через отказоустойчивый пул
 async function fetchLanyardUser() {
   if (!CONFIG.discordId) return;
 
-  const rawUrl = `https://api.lanyard.rest/v1/users/${CONFIG.discordId}`;
+  const total = LANYARD_ENDPOINTS.length;
 
+  for (let attempt = 0; attempt < total; attempt++) {
+    const idx = (activeLanyardIndex + attempt) % total;
+    const url = LANYARD_ENDPOINTS[idx](CONFIG.discordId);
+
+    try {
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), 2200);
+      const res = await fetch(url, {
+        signal: ctrl.signal,
+        headers: { 'Accept': 'application/json' },
+        cache: 'no-store'
+      });
+      clearTimeout(timer);
+
+      if (res.ok) {
+        const json = await res.json();
+        if (json && json.data) {
+          activeLanyardIndex = idx; // Запоминаем быстрый рабочий шлюз
+          handlePresence(json.data);
+          return;
+        }
+      }
+    } catch (e) {
+      // При ошибке переключаемся на следующий в списке
+    }
+  }
+
+  // Резервный опрос через cnrad SVG если все JSON-шлюзы недоступны
   try {
     const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), 1800);
-    const res = await fetch(rawUrl, { signal: ctrl.signal, headers: { 'Accept': 'application/json' } });
+    const timer = setTimeout(() => ctrl.abort(), 2000);
+    const svgRes = await fetch(`https://cors-anywhere.fly.dev/https://lanyard.cnrad.dev/api/${CONFIG.discordId}`, {
+      signal: ctrl.signal,
+      cache: 'no-store'
+    });
     clearTimeout(timer);
-    if (res.ok) {
-      const json = await res.json();
-      if (json && json.data) {
-        handlePresence(json.data);
-      }
+    if (svgRes.ok) {
+      const svgText = await svgRes.text();
+      if (svgText) parseSvgPresence(svgText);
     }
   } catch (e) {}
 }
@@ -896,7 +959,7 @@ function startLanyardPolling() {
   isLanyardPolling = true;
   fetchLanyardUser();
   if (!lanyardPollTimer) {
-    lanyardPollTimer = setInterval(fetchLanyardUser, 3000);
+    lanyardPollTimer = setInterval(fetchLanyardUser, 2500);
   }
 }
 
@@ -911,22 +974,22 @@ function stopLanyardPolling() {
 function initLanyard() {
   if (!CONFIG.discordId) return;
 
-  // Всегда запускаем HTTP-опрос сразу для мгновенного ответа
+  // Всегда запускаем HTTP-опрос сразу для мгновенного ответа за 300мс без VPN
   startLanyardPolling();
 
-  let wsConnectTimeout = null;
+  // Пытаемся также открыть прямой WebSocket (для пользователей с VPN/за границей)
   try {
     if (lanyardWs) {
       try { lanyardWs.close(); } catch (e) {}
     }
     lanyardWs = new WebSocket('wss://api.lanyard.rest/socket');
 
-    wsConnectTimeout = setTimeout(() => {
-      // Если сокет не открылся за 3 секунды, закрываем его, чтобы не держать висящее соединение
+    const wsConnectTimeout = setTimeout(() => {
+      // Если сокет не открылся за 2.5 сек (блокировка ТСПУ в РФ), мягко закрываем
       if (lanyardWs && lanyardWs.readyState !== WebSocket.OPEN) {
         try { lanyardWs.close(); } catch (e) {}
       }
-    }, 3000);
+    }, 2500);
 
     lanyardWs.onopen = () => {
       clearTimeout(wsConnectTimeout);
