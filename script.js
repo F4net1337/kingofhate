@@ -871,42 +871,21 @@ function parseSvgPresence(svg) {
   }
 }
 
-// Резервный HTTP-опрос через прямой эндпоинт и CORS-прокси
+// HTTP-опрос Lanyard API
 async function fetchLanyardUser() {
   if (!CONFIG.discordId) return;
 
   const rawUrl = `https://api.lanyard.rest/v1/users/${CONFIG.discordId}`;
 
-  // 1. Прямой запрос к Lanyard API (сверхбыстрый, 300мс с Zapret или за пределами РФ)
   try {
     const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), 2800);
+    const timer = setTimeout(() => ctrl.abort(), 1800);
     const res = await fetch(rawUrl, { signal: ctrl.signal, headers: { 'Accept': 'application/json' } });
     clearTimeout(timer);
     if (res.ok) {
       const json = await res.json();
       if (json && json.data) {
         handlePresence(json.data);
-        return;
-      }
-    }
-  } catch (e) {}
-
-  // 2. Резервный прокси через allorigins.win (для пользователей из РФ без Zapret / VPN)
-  try {
-    const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(rawUrl)}`;
-    const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), 6500);
-    const res = await fetch(proxyUrl, { signal: ctrl.signal });
-    clearTimeout(timer);
-    if (res.ok) {
-      const data = await res.json();
-      if (data && data.contents) {
-        const parsed = JSON.parse(data.contents);
-        if (parsed && parsed.data) {
-          handlePresence(parsed.data);
-          return;
-        }
       }
     }
   } catch (e) {}
