@@ -37,6 +37,43 @@ const CONFIG = {
 const $ = (id) => document.getElementById(id);
 const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
+// ── DEFENSIVE APPSEC SANITIZATION UTILITIES ─────────────
+function escapeHtml(str) {
+  if (str === null || str === undefined) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function stripHtml(str) {
+  if (str === null || str === undefined) return '';
+  return String(str).replace(/<[^>]*>/g, '').trim();
+}
+
+function sanitizeText(str) {
+  if (str === null || str === undefined) return '';
+  return String(str).replace(/[\u0000-\u001F\u007F-\u009F]/g, '').trim();
+}
+
+function sanitizeUrl(url) {
+  if (!url || typeof url !== 'string') return '';
+  const trimmed = url.trim();
+  // Safe HTTPS URL: no quotes, whitespace, or CSS breakout characters
+  if (/^https:\/\/[a-zA-Z0-9\-._~:/?#[\]@!$&'*+,;=%]+$/i.test(trimmed)) {
+    if (!/["'()\\]/.test(trimmed)) {
+      return trimmed;
+    }
+  }
+  // Safe Base64 Image Data URI
+  if (/^data:image\/(?:png|jpeg|jpg|webp|gif|svg\+xml);base64,[A-Za-z0-9+/=]+$/i.test(trimmed)) {
+    return trimmed;
+  }
+  return '';
+}
+
 // ── 2. WEB AUDIO SYNTH (SFX) ───────────────────────────
 let audioCtx = null;
 function getAudioContext() {
@@ -140,18 +177,25 @@ function updateTime() {
     timeEl.textContent = timeStr;
   }
 
-  // Timezone difference with visitor (Yekaterinburg UTC+5)
+  // Timezone difference with visitor
   const diffMinutes = tzOffset(CONFIG.tz, now) + now.getTimezoneOffset();
   const diffHours = diffMinutes / 60;
   const absH = Math.abs(diffHours);
   const hs = (Number.isInteger(absH) ? absH : absH.toFixed(1)) + 'h';
   const off = tzOffset(CONFIG.tz, now);
-  const tzLabel = 'gmt' + (off < 0 ? '-' : '+') + Math.floor(Math.abs(off) / 60);
+  const offH = Math.floor(Math.abs(off) / 60);
+  const offM = Math.abs(off) % 60;
+  const sign = off >= 0 ? '+' : '-';
+  const utcStr = `utc${sign}${offH}${offM ? ':' + String(offM).padStart(2, '0') : ''}`;
+  const mskDiff = Math.round((off - 180) / 60);
+  const mskStr = mskDiff === 0 ? 'msk' : `msk${mskDiff > 0 ? '+' : ''}${mskDiff}`;
+  const tzCity = (CONFIG.tz || '').toLowerCase().includes('yekaterinburg') ? 'ekb' : ((CONFIG.tz || '').split('/')[1] || '').toLowerCase().replace(/_/g, ' ');
+  const baseTzStr = `${utcStr}${tzCity ? ' · ' + tzCity : ''} (${mskStr})`;
 
   const tzDiffEl = $('tzdiff');
   if (tzDiffEl) {
     const diffStr = diffHours === 0 ? ' · your time' : diffHours > 0 ? ` · ${hs} ahead` : ` · ${hs} behind`;
-    tzDiffEl.textContent = `utc+5 · ekb (msk+2)${diffStr}`;
+    tzDiffEl.textContent = `${baseTzStr}${diffStr}`;
   }
 
   // Day percentage bar and period of day
@@ -407,6 +451,7 @@ function renderPets(bump = false) {
   }
 }
 renderPets(false);
+renderCatCaption();
 
 // Синхронизация общего счётчика всех пользователей в мире
 async function fetchGlobalPets() {
@@ -416,7 +461,7 @@ async function fetchGlobalPets() {
     const raw = await res.text();
     const clean = raw.replace(/["\s]/g, '');
     const val = parseInt(clean, 10);
-    if (!isNaN(val) && val > 0) {
+    if (!isNaN(val) && val > 0 && Number.isFinite(val) && val < 1000000000) {
       totalPets = Math.max(totalPets, val, myPets, PETS_BASELINE);
       try { localStorage.setItem('rin_green_totalpets', totalPets); } catch (e) {}
       renderPets(false);
@@ -465,7 +510,17 @@ async function flushPetSync() {
 
 window.addEventListener('beforeunload', () => {
   if (pendingPetSync > 0) {
-    flushPetSync();
+    const count = pendingPetSync;
+    pendingPetSync = 0;
+    for (let i = 0; i < count; i++) {
+      try {
+        fetch(PETS_API_INC, {
+          method: 'POST',
+          body: '',
+          keepalive: true
+        });
+      } catch (e) {}
+    }
   }
 });
 
@@ -536,9 +591,20 @@ function handlePet(x, y) {
 
 if (cat) {
   cat.addEventListener('click', (e) => {
-    if (!e.isTrusted || e.detail === 0) return;
+    if (!e.isTrusted) return;
     const r = cat.getBoundingClientRect();
-    handlePet(e.clientX - r.left, e.clientY - r.top);
+    const hasValidCoords = typeof e.clientX === 'number' && e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom;
+    const x = hasValidCoords ? (e.clientX - r.left) : (r.width / 2);
+    const y = hasValidCoords ? (e.clientY - r.top) : (r.height / 2);
+    handlePet(x, y);
+  });
+
+  cat.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      const r = cat.getBoundingClientRect();
+      handlePet(r.width / 2, r.height / 2);
+    }
   });
 }
 
@@ -560,6 +626,7 @@ let animFrameId = null;
 function stepProgressBar() {
   if (!isLivePlaying || !liveTrackDuration) {
     if (npFill) npFill.style.transform = 'scaleX(0)';
+    animFrameId = null;
     return;
   }
 
@@ -575,6 +642,7 @@ function stepProgressBar() {
     animFrameId = requestAnimationFrame(stepProgressBar);
   } else if (pct >= 1) {
     if (npFill) npFill.style.transform = 'scaleX(1)';
+    animFrameId = null;
   }
 }
 
@@ -623,14 +691,24 @@ function applyLiveMusic(track) {
     startProgressBar();
   }
 
-  if (npName && npName.textContent !== track.title) {
-    npName.textContent = track.title;
+  const safeTitle = sanitizeText(track.title) || 'offline';
+  if (npName && npName.textContent !== safeTitle) {
+    npName.textContent = safeTitle;
   }
   if (npArtists) {
     npArtists.style.display = '';
-    const artistHtml = `${track.artist} <small style="color:var(--accent);margin-left:4px;">• live</small>`;
-    if (npArtists.innerHTML !== artistHtml) {
-      npArtists.innerHTML = artistHtml;
+    const safeArtist = sanitizeText(track.artist);
+    if (npArtists.dataset.renderedArtist !== safeArtist) {
+      npArtists.dataset.renderedArtist = safeArtist;
+      npArtists.textContent = '';
+      if (safeArtist) {
+        npArtists.appendChild(document.createTextNode(safeArtist + ' '));
+        const liveBadge = document.createElement('small');
+        liveBadge.style.color = 'var(--accent)';
+        liveBadge.style.marginLeft = '4px';
+        liveBadge.textContent = '• live';
+        npArtists.appendChild(liveBadge);
+      }
     }
   }
 
@@ -640,8 +718,9 @@ function applyLiveMusic(track) {
   if (dot && dot.classList.contains('idle')) dot.classList.remove('idle');
   if (npStatusText && npStatusText.textContent !== 'now playing') npStatusText.textContent = 'now playing';
 
-  if (track.coverUrl) {
-    const coverBg = `url("${track.coverUrl}")`;
+  const safeCoverUrl = sanitizeUrl(track.coverUrl);
+  if (safeCoverUrl) {
+    const coverBg = `url("${safeCoverUrl}")`;
     if (npCover && npCover.style.backgroundImage !== coverBg) {
       npCover.style.backgroundImage = coverBg;
       npCover.style.backgroundSize = 'cover';
@@ -665,6 +744,7 @@ function setPlayerIdle() {
 
   if (npName) npName.textContent = 'offline';
   if (npArtists) {
+    delete npArtists.dataset.renderedArtist;
     npArtists.textContent = '';
     npArtists.style.display = 'none';
   }
@@ -711,12 +791,13 @@ function handlePresence(p) {
   // 1. СТАТУС ДИСКОРДА (online / idle / dnd / offline)
   const statusDot = $('ds-status-dot');
   if (statusDot) {
-    const st = p.discord_status || 'offline';
+    const rawSt = String(p.discord_status || 'offline').toLowerCase();
+    const st = ['online', 'idle', 'dnd', 'offline', 'streaming'].includes(rawSt) ? rawSt : 'offline';
     statusDot.className = `ds-status-dot ${st}`;
     statusDot.title = `status: ${st}`;
   }
 
-  const activities = p.activities || [];
+  const activities = Array.isArray(p.activities) ? p.activities : [];
 
   // 2. ИГРОВАЯ АКТИВНОСТЬ (например: Fortnite, CS2, Dota 2, Roblox, Xbox)
   const gameAct = activities.find(isGameActivity);
@@ -735,18 +816,18 @@ function handlePresence(p) {
     }
     if (dsValDefault) dsValDefault.style.display = 'none';
     if (dsGameView) dsGameView.style.display = 'flex';
-    if (dsGameName) dsGameName.textContent = gameAct.name;
+    if (dsGameName) dsGameName.textContent = sanitizeText(gameAct.name) || 'Fortnite';
 
-    const parts = [gameAct.details, gameAct.state].filter(Boolean);
+    const parts = [gameAct.details, gameAct.state].filter(Boolean).map(sanitizeText);
     let desc = parts.join(' · ');
-    if (gameAct.timestamps && gameAct.timestamps.start) {
+    if (gameAct.timestamps && gameAct.timestamps.start && Number.isFinite(gameAct.timestamps.start)) {
       const elapsedMs = Math.max(0, Date.now() - gameAct.timestamps.start);
       const h = Math.floor(elapsedMs / 3600000);
       const m = Math.floor((elapsedMs % 3600000) / 60000);
       const timeStr = h > 0 ? `${h}h ${m}m in game` : `${m}m in game`;
       desc = desc ? `${desc} · ${timeStr}` : timeStr;
     }
-    if (dsGameDesc) dsGameDesc.textContent = desc || 'playing now';
+    if (dsGameDesc) dsGameDesc.textContent = sanitizeText(desc) || 'playing now';
   } else {
     if (dsGameBadge) dsGameBadge.style.display = 'none';
     if (dsValDefault) dsValDefault.style.display = 'flex';
@@ -757,14 +838,14 @@ function handlePresence(p) {
   // А) Проверка Spotify через прямой модуль Lanyard
   if (p.listening_to_spotify && p.spotify) {
     const sp = p.spotify;
-    const start = sp.timestamps.start;
-    const end = sp.timestamps.end;
+    const start = sp.timestamps && sp.timestamps.start ? sp.timestamps.start : Date.now();
+    const end = sp.timestamps && sp.timestamps.end ? sp.timestamps.end : start + 180000;
     const progress = Math.max(0, Math.floor((Date.now() - start) / 1000));
     const duration = Math.max(1, Math.floor((end - start) / 1000));
 
     applyLiveMusic({
-      title: sp.song,
-      artist: sp.artist,
+      title: sanitizeText(sp.song),
+      artist: sanitizeText(sp.artist),
       coverUrl: sp.album_art_url,
       startMs: start,
       duration,
@@ -780,15 +861,15 @@ function handlePresence(p) {
   if (musicAct) {
     let cover = '';
     if (musicAct.assets && musicAct.assets.large_image) {
-      const img = musicAct.assets.large_image;
+      const img = String(musicAct.assets.large_image);
       if (img.startsWith('spotify:')) {
-        cover = `https://i.scdn.co/image/${img.slice(8)}`;
+        cover = `https://i.scdn.co/image/${encodeURIComponent(img.slice(8))}`;
       } else if (img.startsWith('mp:external')) {
         cover = img.replace(/^mp:external\/[^\/]+\/(https?)\//, '$1://');
-      } else if (img.startsWith('http')) {
+      } else if (/^https?:\/\//i.test(img)) {
         cover = img;
-      } else {
-        cover = `https://cdn.discordapp.com/app-assets/${musicAct.application_id}/${img}.png`;
+      } else if (musicAct.application_id) {
+        cover = `https://cdn.discordapp.com/app-assets/${encodeURIComponent(musicAct.application_id)}/${encodeURIComponent(img)}.png`;
       }
     }
 
@@ -800,13 +881,13 @@ function handlePresence(p) {
     const duration = end ? Math.max(1, Math.floor((end - start) / 1000)) : 210;
 
     applyLiveMusic({
-      title: musicAct.details || musicAct.name,
-      artist: musicAct.state || 'Playing',
+      title: sanitizeText(musicAct.details || musicAct.name),
+      artist: sanitizeText(musicAct.state || 'Playing'),
       coverUrl: cover,
       startMs: start,
       duration,
       progress,
-      source: musicAct.name || 'Dotify'
+      source: sanitizeText(musicAct.name || 'Dotify')
     });
     return;
   }
@@ -837,10 +918,10 @@ function parseSvgPresence(svg) {
   // 2. Музыка в SVG (Listening to Spotify... / Listening to Dotify...)
   const musicMatch = svg.match(/Listening to\s+([A-Za-z0-9_\-\s]+)\.\.\./i);
   if (musicMatch) {
-    const srcName = musicMatch[1] ? musicMatch[1].trim() : 'Dotify';
-    const pMatches = [...svg.matchAll(/<p[^>]*>(.*?)<\/p>/g)].map(m => m[1]);
-    const title = pMatches[1] || 'Music Track';
-    const artistRaw = pMatches[2] || '';
+    const srcName = sanitizeText(musicMatch[1] ? musicMatch[1].trim() : 'Dotify');
+    const pMatches = [...svg.matchAll(/<p[^>]*>(.*?)<\/p>/g)].map(m => stripHtml(m[1]));
+    const title = sanitizeText(pMatches[1]) || 'Music Track';
+    const artistRaw = sanitizeText(pMatches[2]) || '';
     const artist = artistRaw.replace(/^By\s+/i, '');
 
     let cover = '';
@@ -855,7 +936,7 @@ function parseSvgPresence(svg) {
       duration: 180,
       progress: 30
     });
-  } else if (isLivePlaying && !liveTrackData) {
+  } else if (isLivePlaying) {
     setPlayerIdle();
   }
 
@@ -868,10 +949,10 @@ function parseSvgPresence(svg) {
   const dsGameDesc = $('ds-game-desc');
 
   if (!isDoingNothing && !musicMatch) {
-    const pMatches = [...svg.matchAll(/<p[^>]*>(.*?)<\/p>/g)].map(m => m[1]);
+    const pMatches = [...svg.matchAll(/<p[^>]*>(.*?)<\/p>/g)].map(m => stripHtml(m[1]));
     if (pMatches.length >= 1) {
-      const gName = pMatches[0];
-      const gDesc = pMatches[1] || 'in game';
+      const gName = sanitizeText(pMatches[0]);
+      const gDesc = sanitizeText(pMatches[1]) || 'in game';
       if (dsGameBadge) dsGameBadge.style.display = 'inline-flex';
       if (dsValDefault) dsValDefault.style.display = 'none';
       if (dsGameView) dsGameView.style.display = 'flex';
@@ -893,6 +974,7 @@ let lanyardWs = null;
 let lanyardHeartbeat = null;
 let lanyardPollTimer = null;
 let isLanyardPolling = false;
+let isFetchingLanyard = false;
 let activeLanyardIndex = 0;
 
 // Высокоскоростные отказоустойчивые эндпоинты (без блокировки ТСПУ РКН, 100% CORS):
@@ -907,54 +989,63 @@ const LANYARD_ENDPOINTS = [
 
 // HTTP-опрос Lanyard API через отказоустойчивый пул
 async function fetchLanyardUser() {
-  if (!CONFIG.discordId) return;
+  if (!CONFIG.discordId || isFetchingLanyard) return;
+  isFetchingLanyard = true;
 
-  const total = LANYARD_ENDPOINTS.length;
+  try {
+    const total = LANYARD_ENDPOINTS.length;
 
-  for (let attempt = 0; attempt < total; attempt++) {
-    const idx = (activeLanyardIndex + attempt) % total;
-    const url = LANYARD_ENDPOINTS[idx](CONFIG.discordId);
-
-    try {
+    for (let attempt = 0; attempt < total; attempt++) {
+      const idx = (activeLanyardIndex + attempt) % total;
+      const url = LANYARD_ENDPOINTS[idx](CONFIG.discordId);
       const ctrl = new AbortController();
       const timer = setTimeout(() => ctrl.abort(), 2200);
-      const res = await fetch(url, {
-        signal: ctrl.signal,
-        headers: { 'Accept': 'application/json' },
-        cache: 'no-store'
-      });
-      clearTimeout(timer);
 
-      if (res.ok) {
-        const json = await res.json();
-        if (json && json.data) {
-          activeLanyardIndex = idx; // Запоминаем быстрый рабочий шлюз
-          handlePresence(json.data);
-          return;
+      try {
+        const res = await fetch(url, {
+          signal: ctrl.signal,
+          headers: { 'Accept': 'application/json' },
+          cache: 'no-store'
+        });
+
+        if (res.ok) {
+          const json = await res.json();
+          if (json && json.data) {
+            activeLanyardIndex = idx; // Запоминаем быстрый рабочий шлюз
+            handlePresence(json.data);
+            return;
+          }
         }
+      } catch (e) {
+        // При ошибке переключаемся на следующий в списке
+      } finally {
+        clearTimeout(timer);
       }
-    } catch (e) {
-      // При ошибке переключаемся на следующий в списке
     }
-  }
 
-  // Резервный опрос через cnrad SVG если все JSON-шлюзы недоступны
-  try {
+    // Резервный опрос через cnrad SVG если все JSON-шлюзы недоступны
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), 2000);
-    const svgRes = await fetch(`https://cors-anywhere.fly.dev/https://lanyard.cnrad.dev/api/${CONFIG.discordId}`, {
-      signal: ctrl.signal,
-      cache: 'no-store'
-    });
-    clearTimeout(timer);
-    if (svgRes.ok) {
-      const svgText = await svgRes.text();
-      if (svgText) parseSvgPresence(svgText);
+    try {
+      const svgRes = await fetch(`https://cors-anywhere.fly.dev/https://lanyard.cnrad.dev/api/${CONFIG.discordId}`, {
+        signal: ctrl.signal,
+        cache: 'no-store'
+      });
+      if (svgRes.ok) {
+        const svgText = await svgRes.text();
+        if (svgText) parseSvgPresence(svgText);
+      }
+    } catch (e) {
+    } finally {
+      clearTimeout(timer);
     }
-  } catch (e) {}
+  } finally {
+    isFetchingLanyard = false;
+  }
 }
 
 function startLanyardPolling() {
+  if (document.hidden) return;
   if (isLanyardPolling) return;
   isLanyardPolling = true;
   fetchLanyardUser();
@@ -993,6 +1084,7 @@ function initLanyard() {
 
     lanyardWs.onopen = () => {
       clearTimeout(wsConnectTimeout);
+      stopLanyardPolling();
       lanyardWs.send(JSON.stringify({
         op: 2,
         d: { subscribe_to_id: CONFIG.discordId }
@@ -1035,17 +1127,19 @@ async function pollLastFm() {
   if (!CONFIG.lastfmUser || isLivePlaying) return;
 
   try {
-    const res = await fetch(`https://ws.audioscrobbler.com/2.0/?method=user.getrecenttracks&user=${CONFIG.lastfmUser}&api_key=4cb074e4b8ec4ee9ad356c3c666a01fe&format=json&limit=1`);
+    const safeUser = encodeURIComponent(CONFIG.lastfmUser);
+    const res = await fetch(`https://ws.audioscrobbler.com/2.0/?method=user.getrecenttracks&user=${safeUser}&api_key=4cb074e4b8ec4ee9ad356c3c666a01fe&format=json&limit=1`);
     if (!res.ok) return;
     const data = await res.json();
     const track = data.recenttracks && data.recenttracks.track && data.recenttracks.track[0];
 
     if (track && track['@attr'] && track['@attr'].nowplaying === 'true') {
       const coverUrl = (track.image && track.image[3] && track.image[3]['#text']) || (track.image && track.image[2] && track.image[2]['#text']) || '';
+      const artistName = track.artist && (track.artist['#text'] || track.artist.name) ? (track.artist['#text'] || track.artist.name) : 'Unknown Artist';
       applyLiveMusic({
-        title: track.name,
-        artist: track.artist['#text'] || track.artist.name,
-        coverUrl,
+        title: sanitizeText(track.name || 'Music Track'),
+        artist: sanitizeText(artistName),
+        coverUrl: sanitizeUrl(coverUrl),
         duration: 200,
         progress: 15,
         source: 'Яндекс Музыка'
@@ -1064,31 +1158,72 @@ if (CONFIG.lastfmUser) {
 setPlayerIdle();
 initLanyard();
 
+// Пауза Lanyard-опроса в неактивной вкладке и обновление при возврате (BUG-09)
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) {
+    stopLanyardPolling();
+  } else {
+    if (!lanyardWs || lanyardWs.readyState !== WebSocket.OPEN) {
+      startLanyardPolling();
+    }
+    fetchGlobalPets();
+  }
+});
+
 // ── 8. DISCORD CLICK-TO-COPY ───────────────────────────
 const cardDiscord = $('card-discord');
 if (cardDiscord) {
+  function showDiscordCopiedFeedback() {
+    const badge = $('ds-badge');
+    const gameBadgeText = $('ds-game-badge-text');
+    if (gameBadgeText && $('ds-game-badge') && $('ds-game-badge').style.display !== 'none') {
+      const oldText = gameBadgeText.textContent;
+      gameBadgeText.textContent = 'copied tag!';
+      setTimeout(() => { gameBadgeText.textContent = oldText; }, 1800);
+    }
+    if (badge) {
+      badge.textContent = 'copied!';
+      badge.style.color = 'var(--accent)';
+      badge.style.borderColor = 'var(--accent)';
+      setTimeout(() => {
+        badge.textContent = 'copy';
+        badge.style.color = '';
+        badge.style.borderColor = '';
+      }, 1800);
+    }
+  }
+
+  function fallbackCopyText(text) {
+    try {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.position = 'fixed';
+      ta.style.left = '-9999px';
+      ta.style.top = '-9999px';
+      ta.setAttribute('readonly', '');
+      document.body.appendChild(ta);
+      ta.select();
+      const successful = document.execCommand('copy');
+      document.body.removeChild(ta);
+      if (successful) {
+        showDiscordCopiedFeedback();
+      }
+    } catch (err) {}
+  }
+
   cardDiscord.addEventListener('click', (e) => {
     e.preventDefault();
     const tag = CONFIG.discordTag || 'fanet666';
-    navigator.clipboard.writeText(tag).then(() => {
-      const badge = $('ds-badge');
-      const gameBadgeText = $('ds-game-badge-text');
-      if (gameBadgeText && $('ds-game-badge') && $('ds-game-badge').style.display !== 'none') {
-        const oldText = gameBadgeText.textContent;
-        gameBadgeText.textContent = 'copied tag!';
-        setTimeout(() => { gameBadgeText.textContent = oldText; }, 1800);
-      }
-      if (badge) {
-        badge.textContent = 'copied!';
-        badge.style.color = 'var(--accent)';
-        badge.style.borderColor = 'var(--accent)';
-        setTimeout(() => {
-          badge.textContent = 'copy';
-          badge.style.color = '';
-          badge.style.borderColor = '';
-        }, 1800);
-      }
-    }).catch(() => {});
+
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(tag).then(() => {
+        showDiscordCopiedFeedback();
+      }).catch(() => {
+        fallbackCopyText(tag);
+      });
+    } else {
+      fallbackCopyText(tag);
+    }
   });
 }
 
@@ -1125,14 +1260,36 @@ if (soundBtn) {
 }
 
 // ── 10. DYNAMIC CONFIG POPULATION ──────────────────────
-if ($('hero-name')) $('hero-name').textContent = CONFIG.name;
-if ($('tg-handle')) $('tg-handle').textContent = '@' + CONFIG.telegram;
-if ($('tg-card')) $('tg-card').href = 'https://t.me/' + CONFIG.telegram;
-if ($('link-tg-pill')) $('link-tg-pill').href = 'https://t.me/' + CONFIG.telegram;
-if ($('link-insta')) $('link-insta').href = CONFIG.instagramUrl || ('https://www.instagram.com/' + CONFIG.instagram);
-if ($('link-steam')) $('link-steam').href = 'https://steamcommunity.com/id/' + CONFIG.steam + '/';
-if ($('about-content')) $('about-content').innerHTML = `<p>${CONFIG.about}</p>`;
-if ($('ds-text')) $('ds-text').textContent = CONFIG.discordTag || 'fanet666';
+if ($('hero-name')) $('hero-name').textContent = sanitizeText(CONFIG.name);
+if ($('tg-handle')) $('tg-handle').textContent = '@' + sanitizeText(CONFIG.telegram);
+if ($('tg-card')) $('tg-card').href = sanitizeUrl('https://t.me/' + CONFIG.telegram);
+if ($('link-tg-pill')) $('link-tg-pill').href = sanitizeUrl('https://t.me/' + CONFIG.telegram);
+if ($('link-insta')) $('link-insta').href = sanitizeUrl(CONFIG.instagramUrl || ('https://www.instagram.com/' + CONFIG.instagram));
+if ($('link-steam')) $('link-steam').href = sanitizeUrl('https://steamcommunity.com/id/' + CONFIG.steam + '/');
+
+if ($('link-twitch')) {
+  $('link-twitch').href = sanitizeUrl('https://www.twitch.tv/' + CONFIG.twitch);
+  $('link-twitch').title = 'Twitch: ' + sanitizeText(CONFIG.twitch);
+}
+if ($('tw-handle')) $('tw-handle').textContent = sanitizeText(CONFIG.twitch);
+
+const aboutContainer = $('about-content');
+if (aboutContainer) {
+  aboutContainer.textContent = '';
+  const aboutP = document.createElement('p');
+  aboutP.textContent = sanitizeText(CONFIG.about);
+  aboutContainer.appendChild(aboutP);
+}
+
+if ($('ds-text')) $('ds-text').textContent = sanitizeText(CONFIG.discordTag || 'fanet666');
+if ($('card-discord')) {
+  $('card-discord').title = `Discord: ${sanitizeText(CONFIG.discordTag || 'fanet666')} (кликните, чтобы скопировать)`;
+}
+
+// Defensively enforce rel="noopener noreferrer" across all external links
+document.querySelectorAll('a[target="_blank"]').forEach((a) => {
+  a.setAttribute('rel', 'noopener noreferrer');
+});
 
 // ── 11. EASTER EGG (JULIA) ─────────────────────────────
 const secretBtn = $('secret-btn');
@@ -1144,6 +1301,7 @@ function openSecretModal() {
   if (!secretModal) return;
   secretModal.classList.add('is-active');
   secretModal.setAttribute('aria-hidden', 'false');
+  if (secretClose) secretClose.focus();
 
   // Play gentle chime if audio is enabled
   if (CONFIG.soundEffects) {
@@ -1174,6 +1332,7 @@ function closeSecretModal() {
   if (!secretModal) return;
   secretModal.classList.remove('is-active');
   secretModal.setAttribute('aria-hidden', 'true');
+  if (secretBtn) secretBtn.focus();
 }
 
 if (secretBtn) secretBtn.addEventListener('click', openSecretModal);
