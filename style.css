@@ -55,8 +55,6 @@ html {
 
 body {
   min-height: 100vh;
-  -webkit-user-select: none;
-  user-select: none;
   -webkit-tap-highlight-color: transparent;
   color: var(--ink);
   font: 400 15px/1.55 "Onest", system-ui, -apple-system, sans-serif;
@@ -131,6 +129,29 @@ b {
 .mono {
   font-family: "JetBrains Mono", ui-monospace, monospace;
   font-variant-numeric: tabular-nums;
+}
+
+/* Scoped user selection (BUG-06) */
+.tile.cat,
+.btn,
+.sound-toggle,
+.visits,
+.secret-btn {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.about,
+.setup,
+p,
+.mono {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+.tile.cat:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 /* ── Container ── */
@@ -767,135 +788,6 @@ b {
   box-shadow: 0 0 8px rgba(52, 211, 153, 0.7);
 }
 
-/* ── GITHUB TILE ── */
-.gh {
-  display: grid;
-  grid-template-columns: 220px minmax(0, 1fr);
-  grid-template-rows: auto 1fr;
-  column-gap: 32px;
-}
-
-.gh-top {
-  grid-column: 1 / -1;
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  gap: 12px;
-  margin-bottom: 10px;
-}
-.gh-top .label { margin: 0; }
-
-.gh-user {
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--dim);
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  transition: color .25s ease;
-}
-.gh-user:hover { color: var(--accent); }
-.gh-user svg { width: 12px; height: 12px; }
-
-.gh-info {
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  justify-content: flex-end;
-}
-.gh .big {
-  font-size: 30px;
-  font-weight: 700;
-  letter-spacing: -.03em;
-  line-height: 1;
-  color: #fff;
-}
-.gh .sub {
-  margin-top: 8px;
-  font-size: 13px;
-  line-height: 1.6;
-  color: var(--soft);
-}
-.gh .sub a {
-  white-space: nowrap;
-  color: var(--ink);
-  font-weight: 600;
-  text-decoration: underline;
-  text-decoration-color: transparent;
-  text-underline-offset: 3px;
-  transition: text-decoration-color .3s ease;
-}
-.gh .sub a:hover {
-  text-decoration-color: var(--accent);
-}
-
-.gh .ref {
-  margin-left: 4px;
-  padding: 1px 7px;
-  border-radius: 6px;
-  background: var(--card-2);
-  border: 1px solid var(--line);
-  font: 500 11px/1.4 "JetBrains Mono", monospace;
-  color: var(--accent);
-}
-
-.gh-total {
-  margin-top: 10px;
-  font-size: 12px;
-  color: var(--dim);
-}
-.gh-total b {
-  color: var(--ink);
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
-}
-
-.gh-map {
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  justify-content: flex-end;
-  --cell: 10px;
-  --cols: 53;
-}
-
-.months, .heat {
-  display: grid;
-  grid-template-columns: repeat(var(--cols), var(--cell));
-  column-gap: 3px;
-}
-.months {
-  height: 18px;
-  font-size: 11px;
-  color: var(--dim);
-  white-space: nowrap;
-  font-family: "JetBrains Mono", monospace;
-}
-.heat {
-  grid-auto-flow: column;
-  grid-template-rows: repeat(7, var(--cell));
-  row-gap: 3px;
-}
-.heat i {
-  border-radius: 3px;
-  background: var(--heat-0);
-  border: 1px solid rgba(0, 0, 0, 0.2);
-  transition: transform .15s, filter .15s;
-}
-.heat i:hover {
-  transform: scale(1.3);
-  z-index: 10;
-  filter: brightness(1.2);
-}
-.heat i.l1 { background: var(--heat-1); }
-.heat i.l2 { background: var(--heat-2); }
-.heat i.l3 { background: var(--heat-3); }
-.heat i.l4 {
-  background: var(--heat-4);
-  box-shadow: 0 0 6px rgba(52, 211, 153, 0.5);
-}
-.heat i.future { background: transparent; border-color: transparent; }
-
 /* ── PETS TILE ── */
 .pets {
   display: flex;
@@ -963,6 +855,7 @@ b {
 }
 
 .ds-icon, .tw-icon {
+  position: relative;
   width: 44px;
   height: 44px;
   border-radius: 12px;
@@ -1027,20 +920,6 @@ b {
   line-height: 1.2;
   transition: all .2s cubic-bezier(.25, .8, .25, 1);
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
-}
-
-.ds-icon {
-  position: relative;
-  width: 44px;
-  height: 44px;
-  border-radius: 12px;
-  background: var(--card-2);
-  border: 1px solid var(--line);
-  display: grid;
-  place-items: center;
-  color: var(--accent);
-  flex: none;
-  transition: all .25s ease;
 }
 
 .ds-status-dot {
